@@ -12,3 +12,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/ping")
+def ping():
+    return "Hello world!"
