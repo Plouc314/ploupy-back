@@ -1,18 +1,8 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from src.api import app
+from src.firebase import Firebase
+import src.users as users
 
-# app
-app = FastAPI()
+Firebase.auth()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/ping")
-def ping():
-    return "Hello world!"
+r = users.get_user(username="bob")
+print(r)
