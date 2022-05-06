@@ -1,6 +1,7 @@
 fastapi
 firebase_admin
-uvicorn
+uvicorn[standard]
 gunicorn
 numpy
 pandas
+python-socketio
