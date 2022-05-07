@@ -10,7 +10,10 @@ class Firebase:
 
     @classmethod
     def auth(cls):
-        '''Authentificate'''
+        '''
+        Authentificate to firebase
+        Must be done before using firebase
+        '''
 
         if cls._initialized:
             return

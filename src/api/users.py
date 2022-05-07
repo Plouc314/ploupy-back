@@ -1,10 +1,9 @@
-from typing import OrderedDict
 from firebase_admin import db
 
-from src.models import UserModel
+from src.core import User
 
 
-def create_user(user: UserModel) -> None:
+def create_user(user: User) -> None:
     '''
     Create a user in the db
     '''
@@ -18,7 +17,7 @@ def create_user(user: UserModel) -> None:
 def get_user(
     uid: str | None = None,
     username: str | None = None,
-) -> UserModel | None:
+) -> User | None:
     '''
     Get the user from the db given the uid or username
     '''
@@ -41,4 +40,4 @@ def get_user(
     if data is None:
         return None
 
-    return UserModel(**data)
+    return User(**data)
