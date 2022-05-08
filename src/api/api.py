@@ -4,9 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.core import User
 
-from .models import UserResponse
+from .models import Response, UserResponse
 from .firebase import Firebase
-from .users import get_user
 
 # app
 app = FastAPI()
@@ -19,25 +18,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Firebase.auth()
+firebase = Firebase()
+
 
 @app.get("/ping")
 def ping():
     return "Hello world!"
 
+
 @app.get("/api/user-data")
-def user_data(uid: str) -> UserResponse:
-    '''
+def user_data(uid: str | None=None, username: str | None=None) -> UserResponse:
+    """
     Return the user data corresponding to the given uid
-    '''
-    user = get_user(uid=uid)
+    """
+    user = firebase.get_user(uid=uid, username=username)
 
     if user is None:
-        return UserResponse(
-            success=False,
-            msg="User not found."
-        )
-    
+        return UserResponse(success=False, msg="User not found.")
+
     return UserResponse(
         success=True,
         data=user,
@@ -45,6 +43,16 @@ def user_data(uid: str) -> UserResponse:
 
 
 @app.post("/api/create-user")
-def create_user(data: User):
-    print(data)
-    return data
+def create_user(data: User) -> Response:
+    '''
+    Create the user if possible and return if it was succesful
+    '''
+    user = firebase.get_user(uid=data.uid)
+    
+    if user is not None:
+        return Response(success=False, msg=f"User already exists")
+    
+    firebase.create_user(data)
+
+    return Response(success=True)
+    
