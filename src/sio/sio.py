@@ -6,7 +6,10 @@ from src.game import Game, GameConfig, Point2D, PlayerStateClient
 from .client import Client
 from .state import State
 
-sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
+sio = socketio.AsyncServer(
+    cors_allowed_origins=["http://localhost:3000"],
+    async_mode="asgi"
+)
 app = socketio.ASGIApp(sio)
 
 state = State()
@@ -17,7 +20,7 @@ async def connect(sid: str, environ: dict):
     """
     Handle the connection, require a `http-uid` header
     """
-
+    print(sid, "connected")
     uid = environ.get("HTTP_UID", None)
     if uid is None:
         return False
@@ -70,7 +73,10 @@ async def player_state(sid: str, data: PlayerStateClient):
 
     game = state.get_game(user.gid)
 
-    player_state = game.game.update_player_state(data)
+    player_state = game.game.update_player_state(
+        user.user.username,
+        PlayerStateClient(**data)
+    )
 
     await sio.emit("player_state", player_state.dict(), to=game.gid)
 

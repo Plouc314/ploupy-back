@@ -51,10 +51,13 @@ class Game:
         player = self.players[username]
         player.pos = state.position.pos
 
+        # floor position to get coordinate
+        coord = [int(state.position.x), int(state.position.y)]
+
         tiles = []
-        tile = self.map.get_tile(state.position.x, state.position.y)
+        tile = self.map.get_tile(*coord)
         if tile is not None:
-            tiles = [tile]
+            tiles = [Point2D.from_list(tile.coord)]
             if tile.owner:
                 tile.owner.remove_tile(tile)
             player.add_tile(tile)

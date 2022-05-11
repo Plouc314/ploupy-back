@@ -1,8 +1,4 @@
-from src.api import app
-from src.firebase import Firebase
-import src.users as users
+from src.api.api import app as rest_app
+from src.sio.sio import app as sio_app
 
-Firebase.auth()
-
-r = users.get_user(username="bob")
-print(r)
+rest_app.mount("/ws", sio_app)

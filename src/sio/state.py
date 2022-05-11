@@ -15,8 +15,8 @@ class State:
         self.queue: list[str] = []
         """Main queue"""
 
-    def get_user(self, sid: str) -> UserState:
-        return self.users[sid]
+    def get_user(self, sid: str) -> UserState | None:
+        return self.users.get(sid, None)
 
     def add_user(self, sid: str, user: User) -> UserState:
         """
