@@ -7,7 +7,7 @@ from .client import Client
 from .state import State
 
 sio = socketio.AsyncServer(
-    cors_allowed_origins=["http://localhost:3000"],
+    cors_allowed_origins=["*"],
     async_mode="asgi"
 )
 app = socketio.ASGIApp(sio)
