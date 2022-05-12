@@ -6,7 +6,7 @@ from src.api import Response, UserResponse
 class Client:
     '''Client to the main api'''
 
-    URL_DEV = "http://127.0.0.1:8000/api/"
+    URL_DEV = "http://127.0.0.1:5000/api/"
     URL_DEPLOY = "https://ploupy.herokuapp.com/api/"
     URL = URL_DEPLOY if FLAG_DEPLOY else URL_DEV
 

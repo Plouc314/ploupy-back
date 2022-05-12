@@ -1,13 +1,13 @@
 import socketio
 
-from src.core import User
+from src.core import User, ALLOWED_ORIGINS
 from src.game import Game, GameConfig, Point2D, PlayerStateClient
 
 from .client import Client
 from .state import State
 
 sio = socketio.AsyncServer(
-    cors_allowed_origins=["*"],
+    cors_allowed_origins=ALLOWED_ORIGINS,
     async_mode="asgi"
 )
 app = socketio.ASGIApp(sio)
@@ -22,10 +22,12 @@ async def connect(sid: str, environ: dict):
     """
     print(sid, "connected")
     uid = environ.get("HTTP_UID", None)
+    
     if uid is None:
         return False
 
     response = Client.get_user_data(uid)
+
     if not response.success:
         return False
 
