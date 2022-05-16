@@ -1,9 +1,26 @@
 import uuid
+from pydantic import BaseModel
 
-from src.core import User
+from src.core import UserModel
 from src.game import Game
 
-from .models import UserState, GameState
+
+class UserState(BaseModel):
+    sid: str
+    """socketio id for user session"""
+    user: UserModel
+    gid: str | None = None
+    """game id"""
+
+
+class GameState(BaseModel):
+    gid: str
+    """game id"""
+    users: list[UserState]
+    game: Game
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class State:
@@ -18,9 +35,9 @@ class State:
     def get_user(self, sid: str) -> UserState | None:
         return self.users.get(sid, None)
 
-    def add_user(self, sid: str, user: User) -> UserState:
+    def add_user(self, sid: str, user: UserModel) -> UserState:
         """
-        Build and add a new UserState object from the given user  
+        Build and add a new UserState object from the given user
         Return the GameState
         """
         user_state = UserState(sid=sid, user=user)
@@ -36,8 +53,8 @@ class State:
 
     def add_game(self, game: Game, users: list[UserState]) -> GameState:
         """
-        Build and add a new GameState object from the given game  
-        Generate a random id for the game  
+        Build and add a new GameState object from the given game
+        Generate a random id for the game
         Return the GameState
         """
         gid = uuid.uuid4().hex

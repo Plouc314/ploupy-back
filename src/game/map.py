@@ -1,7 +1,8 @@
 import numpy as np
 
+from src.core import Coord
+
 from .tile import Tile
-from .models import Coord
 
 class Map:
 
@@ -30,3 +31,5 @@ class Map:
         if 0 <= x < self.dim[0] and 0 <= y < self.dim[1]:
             return self.tiles[x][y]
         return None
+    
+    

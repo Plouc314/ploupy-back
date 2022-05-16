@@ -1,36 +1,50 @@
 import numpy as np
+from pydantic import BaseModel
 
-from src.core import User
+from src.core import UserModel, PointModel, Pos
+from src.game.entity import Factory, FactoryModel, Probe, ProbeModel
 
-from .tile import Tile
-from .models import Pos
+from .exceptions import ActionException
+
+class PlayerModel(BaseModel):
+    username: str
+    money: int
+    score: int
+    factories: list[FactoryModel]
+    probes: list[ProbeModel]
+
 
 class Player:
-    
-    def __init__(self, user: User, pos: Pos):
+    def __init__(self, user: UserModel, pos: Pos, money: int):
         self.user = user
         self.pos = np.array(pos, dtype=float)
+        self.money = money
         self.score = 0
-        self.tiles: list[Tile] = []
-    
-    def add_tile(self, tile: Tile) -> None:
+        self.factories: list[Factory] = []
+        self.probes: list[Probe] = []
+
+    def build_factory(self, coord: PointModel, price: int) -> Factory:
         '''
-        Add a tile to the user,
-        if tile is new: update score
+        Build a factory at the given coord is possible
         '''
-        if tile in self.tiles:
-            return
+        if self.money < price:
+            raise ActionException(f"Not enough money ({self.money})")
         
-        self.tiles.append(tile)
-        self.score += 1
-    
-    def remove_tile(self, tile: Tile) -> None:
-        '''
-        Remove a tile of the user,
-        if tile exists: update score
-        '''
-        if not tile in self.tiles:
-            return
-        
-        self.tiles.remove(tile)
-        self.score -= 1
+        self.money -= price
+
+        factory = Factory(self, coord.coord)
+        self.factories.append(factory)
+        return factory
+
+    @property
+    def model(self) -> PlayerModel:
+        """
+        Return the model (pydantic) representation of the instance
+        """
+        return PlayerModel(
+            username=self.user.username,
+            money=self.money,
+            score=self.score,
+            factories=[factory.model for factory in self.factories],
+            probes=[probe.model for probe in self.probes],
+        )

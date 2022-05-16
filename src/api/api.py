@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.core import ResponseModel, UserModel, ALLOWED_ORIGINS
 
-from src.core import User, ALLOWED_ORIGINS
-
-from .models import Response, UserResponse
 from .firebase import Firebase
+from .response import UserResponse
 
 # app
 app = FastAPI()
@@ -27,32 +26,32 @@ def ping():
 
 
 @app.get("/api/user-data")
-def user_data(uid: str | None=None, username: str | None=None) -> UserResponse:
+def user_data(uid: str | None=None, username: str | None=None) -> ResponseModel:
     """
     Return the user data corresponding to the given uid
     """
     user = firebase.get_user(uid=uid, username=username)
 
     if user is None:
-        return UserResponse(success=False, msg="User not found.")
+        return ResponseModel(success=False, msg="User not found.")
 
     return UserResponse(
         success=True,
-        data=user,
+        user=user,
     )
 
 
 @app.post("/api/create-user")
-def create_user(data: User) -> Response:
+def create_user(data: UserModel) -> ResponseModel:
     '''
     Create the user if possible and return if it was succesful
     '''
     user = firebase.get_user(uid=data.uid)
     
     if user is not None:
-        return Response(success=False, msg=f"User already exists")
+        return ResponseModel(success=False, msg=f"User already exists")
     
     firebase.create_user(data)
 
-    return Response(success=True)
+    return ResponseModel(success=True)
     

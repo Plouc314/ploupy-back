@@ -1,7 +1,8 @@
 import requests
+from core.models import ResponseModel
 
 from src.core import FLAG_DEPLOY
-from src.api import Response, UserResponse
+from src.api import UserResponse
 
 class Client:
     '''Client to the main api'''
@@ -35,11 +36,11 @@ class Client:
         return data
     
     @classmethod
-    def get_user_data(cls, uid: str) -> UserResponse | None:
+    def get_user_data(cls, uid: str) -> UserResponse:
         '''
         Return the value of the `user-data` endpoint
         '''
         response = cls.get("user-data", {"uid": uid})
         if response is None:
-            return None
+            return ResponseModel(success=False)
         return UserResponse(**response)

@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
-from src.core import User
+from src.core import UserModel
 
 
 class Firebase:
@@ -26,7 +26,7 @@ class Firebase:
 
     def __init__(self):
         self._initialized = False
-        self._cache_users: dict[str, User] = {}
+        self._cache_users: dict[str, UserModel] = {}
         self.auth()
 
     def auth(self):
@@ -42,7 +42,7 @@ class Firebase:
         cred = credentials.Certificate(self.CERT)
         firebase_admin.initialize_app(cred, {"databaseURL": self.URL_DATABASE})
 
-    def create_user(self, user: User) -> None:
+    def create_user(self, user: UserModel) -> None:
         """
         Create a user in the db
         """
@@ -60,7 +60,7 @@ class Firebase:
         self,
         uid: str | None = None,
         username: str | None = None,
-    ) -> User | None:
+    ) -> UserModel | None:
         """
         Get the user from the db given the uid or username
         """
@@ -77,7 +77,7 @@ class Firebase:
                 return None
 
             data["uid"] = uid
-            user = User(**data)
+            user = UserModel(**data)
 
             self._cache_users[uid] = user
             return user
@@ -102,7 +102,7 @@ class Firebase:
             for uid, data in results.items():
                 data["uid"] = uid
                 break
-            user = User(**data)
+            user = UserModel(**data)
 
             self._cache_users[uid] = user
             return user
