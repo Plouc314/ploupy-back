@@ -81,5 +81,5 @@ class Game:
         Return the model (pydantic) representation of the instance
         """
         return GameModel(
-            config=self.config, players=[player.model for player in self.players]
+            config=self.config, players=[player.model for player in self.players.values()]
         )

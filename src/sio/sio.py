@@ -1,9 +1,8 @@
 import socketio
 from pydantic import ValidationError
-from game.exceptions import ActionException
 
 from src.core import PointModel, ResponseModel, ALLOWED_ORIGINS
-from src.game import Game, GameConfig
+from src.game import Game, GameConfig, ActionException
 
 from .client import Client
 from .state import State
@@ -36,9 +35,9 @@ async def connect(sid: str, environ: dict):
     if not response.success:
         return False
 
-    print(response.data.username, "connected")
+    print(response.user.username, "connected")
 
-    state.add_user(sid, response.data)
+    state.add_user(sid, response.user)
 
 
 @sio.event
@@ -97,5 +96,5 @@ async def action_build(sid: str, data: dict) -> ResponseModel:
 
     await sio.emit("action_build", response.dict(), to=gs.gid)
 
-    return ResponseModel()
+    return ResponseModel().dict()
 

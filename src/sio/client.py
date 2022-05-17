@@ -1,7 +1,6 @@
 import requests
-from core.models import ResponseModel
 
-from src.core import FLAG_DEPLOY
+from src.core import ResponseModel, FLAG_DEPLOY
 from src.api import UserResponse
 
 class Client:
