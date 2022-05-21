@@ -1,19 +1,13 @@
-from __future__ import annotations
 import numpy as np
 from pydantic import BaseModel
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
 from src.core import Pos, Coord
 
-if TYPE_CHECKING:
-    from src.game.player import Player
-
 
 class Entity(ABC):
-    def __init__(self, player: "Player", pos: Pos | Coord):
-        self.player = player
+    def __init__(self, pos: Pos | Coord):
         self._pos = np.array(pos, dtype=float)
 
     @property

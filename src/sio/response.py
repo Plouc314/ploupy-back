@@ -1,5 +1,5 @@
 from src.core import ResponseModel
-from src.game.entity import FactoryModel
+from src.game.entity.models import FactoryModel
 
 
 class ActionBuildResponse(ResponseModel):
