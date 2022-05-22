@@ -2,23 +2,18 @@ import socketio
 from pydantic import ValidationError
 
 from src.core import PointModel, ResponseModel, ALLOWED_ORIGINS
-from src.game import Game, GameConfig, ActionException
+from src.game import Game, GameConfig, ActionException, BuildFactoryResponse
 
 from .sio import sio
 from .client import Client
 from .state import State
 from .job import JobManager
-from .response import ActionBuildResponse
-from .actions import ActionBuildModel
+from .actions import ActionBuildFactoryModel
+
 
 app = socketio.ASGIApp(sio)
 
 state = State()
-
-
-def task(msg: str):
-    pass
-
 
 @sio.event
 async def connect(sid: str, environ: dict):
@@ -66,6 +61,7 @@ async def join_queue(sid: str):
         factory_price=0,
         building_occupation_min=0,
         max_occupation=10,
+        probe_speed=1,
     )
     job_manager = JobManager(gid)
 
@@ -84,7 +80,7 @@ async def join_queue(sid: str):
 
 
 @sio.event
-async def action_build(sid: str, data: dict) -> ResponseModel:
+async def action_build_factory(sid: str, data: dict) -> ResponseModel:
     us = state.get_user(sid)
 
     gs = state.get_game(us.gid)
@@ -92,7 +88,7 @@ async def action_build(sid: str, data: dict) -> ResponseModel:
         return
 
     try:
-        action_mod = ActionBuildModel(**data)
+        action_mod = ActionBuildFactoryModel(**data)
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
@@ -103,8 +99,8 @@ async def action_build(sid: str, data: dict) -> ResponseModel:
     except ActionException as e:
         return ResponseModel(success=False, msg=str(e)).dict()
 
-    response = ActionBuildResponse(username=us.user.username, factory=model)
+    response = BuildFactoryResponse(username=us.user.username, factory=model)
 
-    await sio.emit("action_build", response.dict(), to=gs.gid)
+    await sio.emit("build_factory", response.dict(), to=gs.gid)
 
     return ResponseModel().dict()

@@ -1,3 +1,4 @@
+import uuid
 import numpy as np
 from pydantic import BaseModel
 
@@ -7,8 +8,9 @@ from src.core import Pos, Coord
 
 
 class Entity(ABC):
-    def __init__(self, pos: Pos | Coord):
+    def __init__(self, pos: Pos | Coord, id: str | None = None):
         self._pos = np.array(pos, dtype=float)
+        self.id = uuid.uuid4().hex if id is None else id
 
     @property
     def coord(self) -> np.ndarray:

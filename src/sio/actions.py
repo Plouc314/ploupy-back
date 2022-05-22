@@ -3,5 +3,5 @@ from pydantic import BaseModel
 from src.core import PointModel
 
 
-class ActionBuildModel(BaseModel):
+class ActionBuildFactoryModel(BaseModel):
     coord: PointModel

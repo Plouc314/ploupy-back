@@ -32,7 +32,7 @@ class Game:
         positions = self._get_start_positions(len(self.users))
 
         for user, pos in zip(self.users.values(), positions):
-            player = Player(user, self.config)
+            player = Player(user, self.map, self.config)
             self.players[user.username] = player
             self._build_initial_expansion(player, pos)
 
@@ -77,8 +77,11 @@ class Game:
 
         tile.building = factory
 
-        job = self.job_manager.make_job("game_state", factory.expand_job)
-        job.start(self.map)
+        job_expand = self.job_manager.make_job("game_state", factory.job_expand)
+        job_expand.start(self.map)
+
+        job_probe = self.job_manager.make_job("build_probe", factory.job_probe)
+        job_probe.start(self.map)
 
         return factory.model
 

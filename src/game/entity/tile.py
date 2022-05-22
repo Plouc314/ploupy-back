@@ -70,6 +70,7 @@ class Tile(Entity):
     @property
     def model(self) -> TileModel:
         return TileModel(
+            id=self.id,
             coord=PointModel.from_list(self._pos),
             owner=None if self.owner is None else self.owner.user.username,
             occupation=self.occupation,

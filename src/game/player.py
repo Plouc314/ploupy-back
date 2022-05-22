@@ -7,11 +7,12 @@ from src.game.entity.probe import Probe
 
 from .exceptions import ActionException
 from .models import GameConfig, PlayerModel
-
+from .map import Map
 
 class Player:
-    def __init__(self, user: UserModel, config: GameConfig):
+    def __init__(self, user: UserModel, map: Map, config: GameConfig):
         self.user = user
+        self.map = map
         self.config = config
         self.money = self.config.initial_money
         self.score = 0
@@ -30,6 +31,14 @@ class Player:
         factory = Factory(self, coord.coord)
         self.factories.append(factory)
         return factory
+
+    def build_probe(self, pos: PointModel) -> Probe:
+        '''
+        Build a probe at the given position is possible
+        '''
+        probe = Probe(self, pos.pos)
+        self.probes.append(probe)
+        return probe
 
     @property
     def model(self) -> PlayerModel:

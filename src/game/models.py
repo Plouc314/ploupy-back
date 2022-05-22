@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from src.core import PointModel
+from src.core import PointModel, ResponseModel
 
 from src.game.entity.models import (
     TileModel,
@@ -44,6 +44,8 @@ class GameConfig(BaseModel):
     """minimal occupation value on tile required on target tile"""
     max_occupation: int
     """maximal occupation value that can be reached"""
+    probe_speed: float
+    """speed of the probe in coordinate/sec"""
 
 
 class GameModel(BaseModel):
@@ -55,3 +57,13 @@ class GameModel(BaseModel):
 class GameStateModel(BaseModel):
     map: MapStateModel | None = None
     players: list[PlayerStateModel] = []
+
+
+class BuildFactoryResponse(ResponseModel):
+    username: str
+    factory: FactoryModel
+
+
+class BuildProbeResponse(ResponseModel):
+    username: str
+    probe: ProbeModel
