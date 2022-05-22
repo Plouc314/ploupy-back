@@ -65,7 +65,7 @@ class Firebase:
         Get the user from the db given the uid or username
         """
 
-        if uid is not None:
+        if uid is not None and uid != "":
             # look in cache
             if uid in self._cache_users.keys():
                 return self._cache_users[uid]
@@ -82,7 +82,7 @@ class Firebase:
             self._cache_users[uid] = user
             return user
 
-        if username is not None:
+        if username is not None and username != "":
             # look in cache
             for user in self._cache_users.values():
                 if user.username == username:

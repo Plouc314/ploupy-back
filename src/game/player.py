@@ -1,36 +1,31 @@
 import numpy as np
-from pydantic import BaseModel
 
-from src.core import UserModel, PointModel, Pos
-from src.game.entity import Factory, FactoryModel, Probe, ProbeModel
+from src.core import UserModel, PointModel
+
+from src.game.entity.factory import Factory
+from src.game.entity.probe import Probe
 
 from .exceptions import ActionException
-
-class PlayerModel(BaseModel):
-    username: str
-    money: int
-    score: int
-    factories: list[FactoryModel]
-    probes: list[ProbeModel]
+from .models import GameConfig, PlayerModel
 
 
 class Player:
-    def __init__(self, user: UserModel, pos: Pos, money: int):
+    def __init__(self, user: UserModel, config: GameConfig):
         self.user = user
-        self.pos = np.array(pos, dtype=float)
-        self.money = money
+        self.config = config
+        self.money = self.config.initial_money
         self.score = 0
         self.factories: list[Factory] = []
         self.probes: list[Probe] = []
 
-    def build_factory(self, coord: PointModel, price: int) -> Factory:
-        '''
+    def build_factory(self, coord: PointModel) -> Factory:
+        """
         Build a factory at the given coord is possible
-        '''
-        if self.money < price:
+        """
+        if self.money < self.config.factory_price:
             raise ActionException(f"Not enough money ({self.money})")
-        
-        self.money -= price
+
+        self.money -= self.config.factory_price
 
         factory = Factory(self, coord.coord)
         self.factories.append(factory)

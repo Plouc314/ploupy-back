@@ -1,3 +1,5 @@
-from .game import Game, GameModel, GameConfig
-from .player import Player, PlayerModel
+from .game import Game
+from .player import Player
+from .map import Map
+from .models import *
 from .exceptions import *

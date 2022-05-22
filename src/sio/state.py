@@ -48,16 +48,20 @@ class State:
         if sid in self.users.keys():
             self.users.pop(sid)
 
+    def get_gid(self) -> str:
+        '''
+        Generate a random id for the game
+        '''
+        return uuid.uuid4().hex 
+
     def get_game(self, gid: str) -> GameState:
         return self.games[gid]
 
-    def add_game(self, game: Game, users: list[UserState]) -> GameState:
+    def add_game(self, gid: str, game: Game, users: list[UserState]) -> GameState:
         """
         Build and add a new GameState object from the given game
-        Generate a random id for the game
         Return the GameState
         """
-        gid = uuid.uuid4().hex
         game_state = GameState(gid=gid, game=game, users=users)
         self.games[gid] = game_state
         return game_state

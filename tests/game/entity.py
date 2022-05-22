@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from src.game.entity import Factory
+from src.game.entity.factory import Factory
 
 
 class EntityTest(unittest.TestCase):

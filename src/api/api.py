@@ -31,7 +31,7 @@ def user_data(uid: str | None=None, username: str | None=None) -> ResponseModel:
     Return the user data corresponding to the given uid
     """
     user = firebase.get_user(uid=uid, username=username)
-
+    print(user)
     if user is None:
         return ResponseModel(success=False, msg="User not found.")
 
