@@ -72,7 +72,7 @@ class Firebase:
             
             # fetch data
             data = db.reference(f"/users/{uid}").get()
-            print(data)
+
             if data is None:
                 return None
 

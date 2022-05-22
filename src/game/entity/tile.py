@@ -48,7 +48,7 @@ class Tile(Entity):
             return True
 
         if self.owner is player:
-            self.occupation += 1
+            self.occupation = min(self.occupation + 1, self.config.max_occupation)
             return True
 
         self.occupation -= 1

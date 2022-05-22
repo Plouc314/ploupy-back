@@ -13,7 +13,9 @@ from .models import GameModel, GameConfig
 
 
 class Game:
-    def __init__(self, users: list[UserModel], job_manager: JobManager, config: GameConfig):
+    def __init__(
+        self, users: list[UserModel], job_manager: JobManager, config: GameConfig
+    ):
         self.users = {u.username: u for u in users}
         self.job_manager = job_manager
         self.config = config
@@ -41,18 +43,17 @@ class Game:
         Return suitable start positions for n players
         """
         radius = np.min(self.map.dim) // 2
-        margin = np.max([3, radius//5])
+        margin = radius // 5
         positions = []
         for i in range(n):
-            angle = i/n * 2*np.pi
+            angle = i / n * 2 * np.pi
             pos = np.array([np.sin(angle), np.cos(angle)])
             pos = (radius - margin) * pos + radius
             positions.append(pos.astype(int))
         return positions
 
     def _build_initial_expansion(self, player: Player, coord: Coord):
-        '''
-        '''
+        """ """
         coords = expansion(coord, 3)
         for coord in coords:
             tile = self.map.get_tile(coord[0], coord[1])
@@ -60,7 +61,6 @@ class Game:
                 continue
             for i in range(5):
                 tile.claim(player)
-
 
     def build_factory(self, player: Player, coord: PointModel) -> FactoryModel:
         """

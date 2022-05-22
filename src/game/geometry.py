@@ -39,7 +39,7 @@ def expansion(origin: Coord, scope: int) -> set[Coord]:
         combinations = itertools.combinations_with_replacement(moves, l + 1)
 
         for comb in combinations:
-            flat = origin
+            flat = origin.copy()
             for move in comb:
                 flat[0] += move[0]
                 flat[1] += move[1]

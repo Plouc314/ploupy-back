@@ -41,7 +41,9 @@ class GameConfig(BaseModel):
     initial_money: int
     factory_price: int
     building_occupation_min: int
-    '''minimal occupation value on tile required on target tile'''
+    """minimal occupation value on tile required on target tile"""
+    max_occupation: int
+    """maximal occupation value that can be reached"""
 
 
 class GameModel(BaseModel):

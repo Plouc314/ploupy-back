@@ -15,8 +15,10 @@ app = socketio.ASGIApp(sio)
 
 state = State()
 
+
 def task(msg: str):
     pass
+
 
 @sio.event
 async def connect(sid: str, environ: dict):
@@ -25,7 +27,7 @@ async def connect(sid: str, environ: dict):
     """
     print(sid, "connected")
     uid = environ.get("HTTP_UID", None)
-    
+
     if uid is None:
         return False
 
@@ -58,7 +60,13 @@ async def join_queue(sid: str):
 
     gid = state.get_gid()
 
-    config = GameConfig(dim=PointModel(x=10, y=10), initial_money=10, factory_price=3, building_occupation_min=0)
+    config = GameConfig(
+        dim=PointModel(x=21, y=21),
+        initial_money=10,
+        factory_price=0,
+        building_occupation_min=0,
+        max_occupation=10,
+    )
     job_manager = JobManager(gid)
 
     # create game
@@ -74,6 +82,7 @@ async def join_queue(sid: str):
     # broadcast start game event
     await sio.emit("start_game", game.model.dict(), to=gs.gid)
 
+
 @sio.event
 async def action_build(sid: str, data: dict) -> ResponseModel:
     us = state.get_user(sid)
@@ -86,17 +95,16 @@ async def action_build(sid: str, data: dict) -> ResponseModel:
         action_mod = ActionBuildModel(**data)
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
-    
+
     player = gs.game.get_player(us.user.username)
 
     try:
         model = gs.game.build_factory(player, action_mod.coord)
     except ActionException as e:
         return ResponseModel(success=False, msg=str(e)).dict()
-    
+
     response = ActionBuildResponse(username=us.user.username, factory=model)
 
     await sio.emit("action_build", response.dict(), to=gs.gid)
 
     return ResponseModel().dict()
-
