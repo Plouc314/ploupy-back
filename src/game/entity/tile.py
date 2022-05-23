@@ -1,13 +1,12 @@
 from __future__ import annotations
 import numpy as np
-from pydantic import BaseModel
 from typing import TYPE_CHECKING
 
 from src.core import PointModel, Coord
 
 from .entity import Entity
 from .factory import Factory
-from .models import TileModel
+from .models import TileModel, TileStateModel
 
 if TYPE_CHECKING:
     from src.game.player import Player
@@ -36,23 +35,29 @@ class Tile(Entity):
 
     def claim(self, player: Player) -> bool:
         """
-        Claim the tile for a player,
-        lower the occupation if occupied by another player,
+        Claim the tile for a player
+        
+        Lower the occupation if occupied by another player,
         else increment it.
 
         Return if the tile is occupied by the given player
         """
+        # tile is unoccupied
         if self.owner is None:
             self.owner = player
+            self.owner.add_tile(self)
             self.occupation = 1
             return True
 
+        # tile is occupied by same player
         if self.owner is player:
             self.occupation = min(self.occupation + 1, self.config.max_occupation)
             return True
 
+        # tile is occupied by other player
         self.occupation -= 1
         if self.occupation == 0:
+            self.owner.remove_tile(self)
             self.owner = None
 
         return False
@@ -65,6 +70,16 @@ class Tile(Entity):
             self.building is None
             # and self.owner is player
             and self.occupation >= self.config.building_occupation_min
+        )
+
+    def get_state(self) -> TileStateModel:
+        '''
+        Return the tile state (occupation and owner)
+        '''
+        return TileStateModel(
+            id=self.id,
+            owner=None if self.owner is None else self.owner.user.username,
+            occupation=self.occupation,
         )
 
     @property

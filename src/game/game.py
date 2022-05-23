@@ -5,7 +5,7 @@ from src.core import UserModel, PointModel, Coord
 from src.sio import JobManager
 from src.game.entity.models import FactoryModel
 
-from .geometry import expansion
+from .geometry import Geometry
 from .map import Map
 from .player import Player
 from .exceptions import ActionException
@@ -34,7 +34,7 @@ class Game:
         for user, pos in zip(self.users.values(), positions):
             player = Player(user, self.map, self.config)
             self.players[user.username] = player
-            self._build_initial_expansion(player, pos)
+            self._build_initial_territory(player, pos)
 
         return self.players
 
@@ -52,9 +52,9 @@ class Game:
             positions.append(pos.astype(int))
         return positions
 
-    def _build_initial_expansion(self, player: Player, coord: Coord):
+    def _build_initial_territory(self, player: Player, coord: Coord):
         """ """
-        coords = expansion(coord, 3)
+        coords = Geometry.square(coord, 3)
         for coord in coords:
             tile = self.map.get_tile(coord[0], coord[1])
             if tile is None:

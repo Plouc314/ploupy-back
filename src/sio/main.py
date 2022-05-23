@@ -59,9 +59,10 @@ async def join_queue(sid: str):
         dim=PointModel(x=21, y=21),
         initial_money=10,
         factory_price=0,
+        factory_max_probe=5,
         building_occupation_min=0,
         max_occupation=10,
-        probe_speed=1,
+        probe_speed=5,
     )
     job_manager = JobManager(gid)
 

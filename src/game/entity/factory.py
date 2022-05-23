@@ -5,7 +5,7 @@ from src.core import PointModel, Coord
 from src.sio import JobManager
 
 from src.game.models import GameStateModel, MapStateModel, BuildProbeResponse
-from src.game.geometry import expansion
+from src.game.geometry import Geometry
 
 from .entity import Entity
 from .models import FactoryModel, FactoryStateModel, TileStateModel
@@ -18,7 +18,9 @@ class Factory(Entity):
     def __init__(self, player: "Player", coord: Coord):
         super().__init__(coord)
         self.player = player
+        self.config = self.player.config
         self.alive = True
+        self._n_probe = 0
 
     async def job_expand(self, map: "Map"):
         """
@@ -44,10 +46,19 @@ class Factory(Entity):
         Create Probe instances at regular intervals
         """
         while self.alive:
+            
+            # temp
+            if self._n_probe == self.config.factory_max_probe:
+                break
+            self._n_probe += 1
+            
             await JobManager.sleep(1)
+            
             pos = self.coord + [0, 1]
             probe = self.player.build_probe(PointModel.from_list(pos))
-            probe.set_target([0, 0])
+            probe.set_target(probe._get_new_target())
+            job_move = jb.make_job("game_state", probe.job_move)
+            job_move.start(map)
 
             yield BuildProbeResponse(
                 username=self.player.user.username, probe=probe.model
@@ -59,7 +70,7 @@ class Factory(Entity):
         """
         tiles: list[TileStateModel] = []
 
-        coords = expansion(self.coord, scope)
+        coords = Geometry.square(self.coord, scope)
 
         for coord in coords:
             tile = map.get_tile(*coord)

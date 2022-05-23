@@ -1,13 +1,15 @@
-import numpy as np
+import random
 
-from src.core import UserModel, PointModel
+from src.core import UserModel, PointModel, Coord
 
 from src.game.entity.factory import Factory
 from src.game.entity.probe import Probe
+from src.game.entity.tile import Tile
 
 from .exceptions import ActionException
 from .models import GameConfig, PlayerModel
 from .map import Map
+from .geometry import Geometry
 
 class Player:
     def __init__(self, user: UserModel, map: Map, config: GameConfig):
@@ -18,6 +20,9 @@ class Player:
         self.score = 0
         self.factories: list[Factory] = []
         self.probes: list[Probe] = []
+        
+        # dict between tile & probes going to the tile
+        self._tiles: dict[Tile, Probe] = {}
 
     def build_factory(self, coord: PointModel) -> Factory:
         """
@@ -39,6 +44,54 @@ class Player:
         probe = Probe(self, pos.pos)
         self.probes.append(probe)
         return probe
+
+    def add_tile(self, tile: Tile) -> None:
+        '''
+        Add a tile to the player
+
+        NOTE: should only be called inside `Tile.claim` to keep the player & tile
+        synchronized.
+        '''
+        if not tile in self._tiles.keys():
+            self._tiles[tile] = []
+    
+    def remove_tile(self, tile: Tile) -> None:
+        '''
+        Remove a tile from the player
+
+        NOTE: should only be called inside `Tile.claim` to keep the player & tile
+        synchronized.
+        '''
+        if tile in self._tiles.keys():
+            self._tiles.pop(tile)
+
+    def get_probe_target(self, probe: Probe) -> Coord:
+        '''
+        Select the probe target (own or unoccupied tile)
+        '''
+        poss = list(Geometry.square(probe.coord, 3))
+        poss.remove(tuple(probe.coord))
+        random.shuffle(poss)
+
+        for coord in poss:
+            tile = self.map.get_tile(*coord)
+            if tile is None:
+                continue
+            
+            probes = self._tiles.get(tile, [])
+            if tile.occupation + len(probes) >= self.config.max_occupation:
+                continue
+
+            neighbours = self.map.get_neighbour_tiles(tile)
+            for neighbour in neighbours:
+                if neighbour.owner is self:
+                    break
+            else:
+                continue
+
+            return coord
+
+        return poss[0]
 
     @property
     def model(self) -> PlayerModel:
