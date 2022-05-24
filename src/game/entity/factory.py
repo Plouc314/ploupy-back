@@ -12,6 +12,7 @@ from .models import FactoryModel, FactoryStateModel, TileStateModel
 
 if TYPE_CHECKING:
     from src.game import Player, Map
+    from .probe import Probe
 
 
 class Factory(Entity):
@@ -20,7 +21,18 @@ class Factory(Entity):
         self.player = player
         self.config = self.player.config
         self.alive = True
-        self._n_probe = 0
+        
+        # probes created by the factory
+        self._probes: list[Probe] = []
+
+    def remove_prove(self, probe: Probe):
+        '''
+        Remove a probe from the "ownership" of the factory
+        i.e. calling this func will allow the factory to produce
+        one more probe.
+        '''
+        if probe in self._probes:
+            self._probes.remove(probe)
 
     async def job_expand(self, map: "Map"):
         """
@@ -47,16 +59,22 @@ class Factory(Entity):
         """
         while self.alive:
             
-            # temp
-            if self._n_probe == self.config.factory_max_probe:
-                break
-            self._n_probe += 1
+            await JobManager.sleep(2)
             
-            await JobManager.sleep(1)
+            # check that the number of probes doesn't exceed the maximum
+            if len(self._probes) == self.config.factory_max_probe:
+                continue
             
             pos = self.coord + [0, 1]
             probe = self.player.build_probe(PointModel.from_list(pos))
+
+            # set probe first target BEFORE sending probe model
             probe.set_target(probe._get_new_target())
+
+            probe.factory = self            
+            self._probes.append(probe)
+
+            # start probe job
             job_move = jb.make_job("game_state", probe.job_move)
             job_move.start(map)
 

@@ -40,12 +40,12 @@ class Map:
         '''
         Return the tiles that are neighbour of the `tile`
         
-        Neighbours as defined by `Geometry.ring(coord, 1)`
+        Neighbours as defined by `Geometry.ring(tile.coord, 1)`
         '''
-        tile = self._tiles_map.get(id, None)
+        tile = self._tiles_map.get(tile.id, None)
         if tile is None:
             return []
-        
+
         coords = Geometry.ring(tile.coord, 1)
         neighbours = []
 

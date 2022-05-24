@@ -18,7 +18,7 @@ from .models import ProbeModel, ProbeStateModel
 
 if TYPE_CHECKING:
     from src.game import Player, Map
-
+    from .factory import Factory
 
 class Probe(Entity):
     def __init__(self, player: "Player", pos: Pos):
@@ -29,6 +29,9 @@ class Probe(Entity):
         """the probe target"""
         self.alive = True
 
+        self.factory: Factory | None = None
+        '''The factory that created the probe'''
+
         # time where the probe started to move to the target
         self._departure_time: float = time.time()
         # travel time until the probe reachs the target
@@ -37,6 +40,17 @@ class Probe(Entity):
         self._travel_distance: float = 0
         # travel vector is the direction to the target (unit vector)
         self._travel_vector: np.ndarray = np.zeros((2))
+
+    def die(self):
+        '''
+        Make the probe die
+
+        Notify dependencies of the probe
+        '''
+        self.alive = False
+
+        if self.factory is not None:
+            self.factory.remove_prove(self)
 
     def set_target(self, target: Coord):
         """
@@ -73,13 +87,15 @@ class Probe(Entity):
 
     async def job_move(self, map: "Map"):
         """ """
+        n = 0
+
         while self.alive:
 
             # wait for the probe to reach destination
             sleep = self._travel_duration - (time.time() - self._departure_time)
             if sleep > 0:
                 await JobManager.sleep(sleep)
-
+            
             # set target as new position
             self.coord = self.target
 

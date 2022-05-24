@@ -39,7 +39,7 @@ class Player:
 
     def build_probe(self, pos: PointModel) -> Probe:
         '''
-        Build a probe at the given position is possible
+        Build a probe at the given position (no check on position)
         '''
         probe = Probe(self, pos.pos)
         self.probes.append(probe)
@@ -78,19 +78,27 @@ class Player:
             if tile is None:
                 continue
             
+            # check if tile occupied by an other player
+            if tile.occupation > 0 and tile.owner is not self:
+                continue
+
+            # check if tile occupation full
             probes = self._tiles.get(tile, [])
             if tile.occupation + len(probes) >= self.config.max_occupation:
                 continue
 
-            neighbours = self.map.get_neighbour_tiles(tile)
-            for neighbour in neighbours:
-                if neighbour.owner is self:
-                    break
-            else:
-                continue
+            # check if tile is isolated
+            if tile.occupation == 0:
+                neighbours = self.map.get_neighbour_tiles(tile)
+                for neighbour in neighbours:
+                    if neighbour.owner is self:
+                        break
+                else:
+                    continue
 
             return coord
 
+        print("no coord")
         return poss[0]
 
     @property
