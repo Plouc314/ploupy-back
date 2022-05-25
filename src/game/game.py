@@ -3,7 +3,7 @@ import numpy as np
 
 from src.core import UserModel, PointModel, Coord
 from src.sio import JobManager
-from src.game.entity.models import FactoryModel
+from src.game.entity.models import FactoryModel, ProbeStateModel
 
 from .geometry import Geometry
 from .map import Map
@@ -32,7 +32,7 @@ class Game:
         positions = self._get_start_positions(len(self.users))
 
         for user, pos in zip(self.users.values(), positions):
-            player = Player(user, self.map, self.config)
+            player = Player(user, self.map, self.job_manager, self.config)
             self.players[user.username] = player
             self._build_initial_territory(player, pos)
 
@@ -62,9 +62,11 @@ class Game:
             for i in range(5):
                 tile.claim(player)
 
-    def build_factory(self, player: Player, coord: PointModel) -> FactoryModel:
+    def action_build_factory(self, player: Player, coord: PointModel) -> FactoryModel:
         """
         Build a factory at the given coord for the given player is possible
+
+        Raise: ActionException
         """
         tile = self.map.get_tile(*coord.coord)
         if tile is None:
@@ -84,6 +86,37 @@ class Game:
         job_probe.start(self.map)
 
         return factory.model
+
+    def action_move_probes(
+        self, player: Player, ids: list[str], targets: list[PointModel]
+    ) -> list[ProbeStateModel]:
+        """
+        Change the target of the probes with the given `ids`
+
+        Raise: ActionException
+        """
+        if len(ids) != len(targets):
+            raise ActionException(
+                f"There should be the same number of ids and targets ({len(ids)} != {len(targets)})."
+            )
+
+        states = []
+
+        for id, target in zip(ids, targets):
+            probe = player.get_probe(id)
+            if probe is None:
+                continue
+            
+            # assert that the target is valid
+            tile = self.map.get_tile(*target)
+            if tile is None:
+                continue
+
+            probe.set_target(target)
+
+            states.append(probe.get_state())
+
+        return states
 
     def get_player(self, username: str) -> Player | None:
         """

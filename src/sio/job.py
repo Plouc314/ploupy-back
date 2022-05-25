@@ -26,6 +26,7 @@ class Job:
         async def job(*args, **kwargs):
             async for data in self.behaviour(*args, **sup_kwargs | kwargs):
                 await sio.emit(self.event, data.dict(), to=self.jb.gid)
+
         return job
 
     def start(self, *args, **kwargs):
@@ -38,17 +39,28 @@ class Job:
     async def sleep(cls, t: float):
         await sio.sleep(t)
 
+
 class JobManager:
-    
     def __init__(self, gid: str) -> None:
         self.gid = gid
 
+    def send(self, event: str, data: BaseModel) -> None:
+        """
+        Send an event
+        """
+
+        async def behaviour():
+            yield data
+
+        job = self.make_job(event, behaviour)
+        job.start()
+
     def make_job(self, event: str, behaviour: AsyncGenerator[BaseModel, None]) -> Job:
-        '''
-        Create a new Job instance  
+        """
+        Create a new Job instance
         behaviour: if it defines a "jb" argument, the JobManager instance will
             be passed as keyword argument
-        '''
+        """
         return Job(self, event, behaviour)
 
     @classmethod

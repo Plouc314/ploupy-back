@@ -1,6 +1,7 @@
 from __future__ import annotations
 import numpy as np
 import time
+import uuid
 from typing import TYPE_CHECKING
 
 from src.core import PointModel, Pos, Coord
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from src.game import Player, Map
     from .factory import Factory
 
+
 class Probe(Entity):
     def __init__(self, player: "Player", pos: Pos):
         super().__init__(pos)
@@ -30,7 +32,7 @@ class Probe(Entity):
         self.alive = True
 
         self.factory: Factory | None = None
-        '''The factory that created the probe'''
+        """The factory that created the probe"""
 
         # time where the probe started to move to the target
         self._departure_time: float = time.time()
@@ -41,16 +43,37 @@ class Probe(Entity):
         # travel vector is the direction to the target (unit vector)
         self._travel_vector: np.ndarray = np.zeros((2))
 
+        # jobs flags
+        self._active_jobs: set[str] = []
+
     def die(self):
-        '''
+        """
         Make the probe die
 
         Notify dependencies of the probe
-        '''
+        """
         self.alive = False
 
         if self.factory is not None:
             self.factory.remove_prove(self)
+
+        self.player.job_manager.send(
+            "game_state",
+            GameStateModel(
+                players=[
+                    PlayerStateModel(
+                        username=self.player.user.username,
+                        probes=[ProbeStateModel(id=self.id, alive=False)],
+                    )
+                ],
+            ),
+        )
+
+    def reset_jobs(self):
+        """
+        Terminate all the active jobs
+        """
+        self._active_jobs.clear()
 
     def set_target(self, target: Coord):
         """
@@ -71,11 +94,11 @@ class Probe(Entity):
         self._travel_duration = self._travel_distance / self.config.probe_speed
         self._travel_vector = (self.target - self.coord) / self._travel_distance
 
-    def _get_new_target(self) -> Coord:
+    def _get_new_target(self) -> Coord | None:
         """
         Select the next target for the probe
         """
-        return self.player.get_probe_target(self)
+        return self.player.get_probe_farm_target(self)
 
     def get_current_pos(self) -> Pos:
         """
@@ -87,15 +110,23 @@ class Probe(Entity):
 
     async def job_move(self, map: "Map"):
         """ """
-        n = 0
 
-        while self.alive:
+        # create a unique id for the job
+        jid = uuid.uuid4().hex
+        # register job
+        self._active_jobs.add(jid)
+
+        while True:
 
             # wait for the probe to reach destination
             sleep = self._travel_duration - (time.time() - self._departure_time)
             if sleep > 0:
                 await JobManager.sleep(sleep)
-            
+
+            # stop condition
+            if not self.alive or not jid in self._active_jobs:
+                return
+
             # set target as new position
             self.coord = self.target
 
@@ -104,9 +135,7 @@ class Probe(Entity):
             tile.claim(self.player)
 
             yield GameStateModel(
-                map=MapStateModel(
-                    tiles=[tile.get_state()]
-                ),
+                map=MapStateModel(tiles=[tile.get_state()]),
                 players=[
                     PlayerStateModel(
                         username=self.player.user.username,
@@ -121,8 +150,15 @@ class Probe(Entity):
 
             await JobManager.sleep(0.5)
 
+            # stop condition
+            if not self.alive or not jid in self._active_jobs:
+                return
+
             # get new target
             target = self._get_new_target()
+            if target is None:
+                self.die()
+                return
             self.set_target(target)
 
             yield GameStateModel(
@@ -137,6 +173,16 @@ class Probe(Entity):
                     )
                 ]
             )
+
+    def get_state(self) -> ProbeStateModel:
+        """
+        Return the probe state (position and target)
+        """
+        return ProbeStateModel(
+            id=self.id,
+            pos=PointModel.from_list(self.get_current_pos()),
+            target=PointModel.from_list(self.target),
+        )
 
     @property
     def model(self) -> ProbeModel:

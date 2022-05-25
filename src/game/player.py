@@ -1,6 +1,7 @@
 import random
 
 from src.core import UserModel, PointModel, Coord
+from src.sio import JobManager
 
 from src.game.entity.factory import Factory
 from src.game.entity.probe import Probe
@@ -11,22 +12,30 @@ from .models import GameConfig, PlayerModel
 from .map import Map
 from .geometry import Geometry
 
+
 class Player:
-    def __init__(self, user: UserModel, map: Map, config: GameConfig):
+    def __init__(
+        self, user: UserModel, map: Map, job_manager: JobManager, config: GameConfig
+    ):
         self.user = user
         self.map = map
+        self.job_manager = job_manager
         self.config = config
         self.money = self.config.initial_money
         self.score = 0
         self.factories: list[Factory] = []
         self.probes: list[Probe] = []
-        
+
         # dict between tile & probes going to the tile
         self._tiles: dict[Tile, Probe] = {}
 
     def build_factory(self, coord: PointModel) -> Factory:
         """
         Build a factory at the given coord is possible
+
+        Update the player's money
+
+        Raise: ActionException
         """
         if self.money < self.config.factory_price:
             raise ActionException(f"Not enough money ({self.money})")
@@ -38,37 +47,46 @@ class Player:
         return factory
 
     def build_probe(self, pos: PointModel) -> Probe:
-        '''
+        """
         Build a probe at the given position (no check on position)
-        '''
+        """
         probe = Probe(self, pos.pos)
         self.probes.append(probe)
         return probe
 
     def add_tile(self, tile: Tile) -> None:
-        '''
+        """
         Add a tile to the player
 
         NOTE: should only be called inside `Tile.claim` to keep the player & tile
         synchronized.
-        '''
+        """
         if not tile in self._tiles.keys():
             self._tiles[tile] = []
-    
+
     def remove_tile(self, tile: Tile) -> None:
-        '''
+        """
         Remove a tile from the player
 
         NOTE: should only be called inside `Tile.claim` to keep the player & tile
         synchronized.
-        '''
+        """
         if tile in self._tiles.keys():
             self._tiles.pop(tile)
 
-    def get_probe_target(self, probe: Probe) -> Coord:
+    def get_probe(self, id: str) -> Probe | None:
         '''
-        Select the probe target (own or unoccupied tile)
+        Return the probe with the given `id` if it exists, else None
         '''
+        for probe in self.probes:
+            if probe.id == id:
+                return probe
+        return None
+
+    def get_probe_farm_target(self, probe: Probe) -> Coord | None:
+        """
+        Return a possible target for the probe to farm (own or unoccupied tile)
+        """
         poss = list(Geometry.square(probe.coord, 3))
         poss.remove(tuple(probe.coord))
         random.shuffle(poss)
@@ -77,7 +95,7 @@ class Player:
             tile = self.map.get_tile(*coord)
             if tile is None:
                 continue
-            
+
             # check if tile occupied by an other player
             if tile.occupation > 0 and tile.owner is not self:
                 continue
@@ -99,7 +117,7 @@ class Player:
             return coord
 
         print("no coord")
-        return poss[0]
+        return None
 
     @property
     def model(self) -> PlayerModel:

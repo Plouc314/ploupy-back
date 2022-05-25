@@ -96,7 +96,7 @@ async def action_build_factory(sid: str, data: dict) -> ResponseModel:
     player = gs.game.get_player(us.user.username)
 
     try:
-        model = gs.game.build_factory(player, action_mod.coord)
+        model = gs.game.action_build_factory(player, action_mod.coord)
     except ActionException as e:
         return ResponseModel(success=False, msg=str(e)).dict()
 
