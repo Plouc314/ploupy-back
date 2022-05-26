@@ -108,11 +108,19 @@ class Game:
                 continue
             
             # assert that the target is valid
-            tile = self.map.get_tile(*target)
+            tile = self.map.get_tile(*target.coord)
             if tile is None:
                 continue
+            
+            # stop current movement job
+            probe.stop_jobs()
 
-            probe.set_target(target)
+            # set new target
+            probe.set_target(target.coord)
+
+            # start new movement job
+            job_move = self.job_manager.make_job("game_state", probe.job_move)
+            job_move.start(self.map)
 
             states.append(probe.get_state())
 

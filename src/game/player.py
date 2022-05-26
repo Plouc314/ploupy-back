@@ -1,4 +1,5 @@
 import random
+import numpy as np
 
 from src.core import UserModel, PointModel, Coord
 from src.sio import JobManager
@@ -75,20 +76,21 @@ class Player:
             self._tiles.pop(tile)
 
     def get_probe(self, id: str) -> Probe | None:
-        '''
+        """
         Return the probe with the given `id` if it exists, else None
-        '''
+        """
         for probe in self.probes:
             if probe.id == id:
                 return probe
         return None
 
-    def get_probe_farm_target(self, probe: Probe) -> Coord | None:
+    def _get_probe_farm_target(self, coord: Coord) -> Coord | None:
         """
-        Return a possible target for the probe to farm (own or unoccupied tile)
+        Return a possible target to farm (own or unoccupied tile)
+        in the surroundings of `coord`
         """
-        poss = list(Geometry.square(probe.coord, 3))
-        poss.remove(tuple(probe.coord))
+        poss = list(Geometry.square(coord, 3))
+        poss.remove(tuple(coord))
         random.shuffle(poss)
 
         for coord in poss:
@@ -116,8 +118,31 @@ class Player:
 
             return coord
 
-        print("no coord")
         return None
+
+    def get_probe_farm_target(self, probe: Probe) -> Coord:
+        """
+        Return a possible target for the probe to farm (own or unoccupied tile)
+        """
+        # first look next to the probe itself
+        target = self._get_probe_farm_target(probe.coord)
+        if target is not None:
+            return target
+
+        # then look next to the factories
+        factories = self.factories.copy()
+        dists = [np.linalg.norm(probe.coord - factory.coord) for factory in factories]
+        while len(factories) > 0:
+            i = np.argmin(dists)
+            dists.pop(i)
+            factory = factories.pop(i)
+            
+            target = self._get_probe_farm_target(factory.coord)
+            if target is not None:
+                return target
+        
+        # if nothing works: return the probe's coord -> wait
+        return probe.coord
 
     @property
     def model(self) -> PlayerModel:

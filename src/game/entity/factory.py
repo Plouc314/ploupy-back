@@ -68,8 +68,10 @@ class Factory(Entity):
             pos = self.coord + [0, 1]
             probe = self.player.build_probe(PointModel.from_list(pos))
 
-            # set probe first target BEFORE sending probe model
-            probe.set_target(probe._get_new_target())
+            # TEMP set probe first target BEFORE sending probe model
+            target = self.player.get_probe_farm_target(probe)
+            if target is not None:
+                probe.set_target(target)
 
             probe.factory = self            
             self._probes.append(probe)

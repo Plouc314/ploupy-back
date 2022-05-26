@@ -44,7 +44,7 @@ class Probe(Entity):
         self._travel_vector: np.ndarray = np.zeros((2))
 
         # jobs flags
-        self._active_jobs: set[str] = []
+        self._active_jobs: set[str] = set()
 
     def die(self):
         """
@@ -53,6 +53,8 @@ class Probe(Entity):
         Notify dependencies of the probe
         """
         self.alive = False
+
+        self.stop_jobs()
 
         if self.factory is not None:
             self.factory.remove_prove(self)
@@ -69,10 +71,15 @@ class Probe(Entity):
             ),
         )
 
-    def reset_jobs(self):
+    def stop_jobs(self):
         """
         Terminate all the active jobs
+
+        If move job is active, update the probe's position
         """
+        if len(self._active_jobs) == 1:
+            self.pos = self.get_current_pos()
+
         self._active_jobs.clear()
 
     def set_target(self, target: Coord):
@@ -94,19 +101,13 @@ class Probe(Entity):
         self._travel_duration = self._travel_distance / self.config.probe_speed
         self._travel_vector = (self.target - self.coord) / self._travel_distance
 
-    def _get_new_target(self) -> Coord | None:
-        """
-        Select the next target for the probe
-        """
-        return self.player.get_probe_farm_target(self)
-
     def get_current_pos(self) -> Pos:
         """
         Return the actual position of the probe
         (somewhere between `pos` and `target`)
         """
         t = time.time() - self._departure_time
-        return self.pos + self._travel_vector * t
+        return self.pos + self._travel_vector * self.config.probe_speed * t
 
     async def job_move(self, map: "Map"):
         """ """
@@ -124,11 +125,14 @@ class Probe(Entity):
                 await JobManager.sleep(sleep)
 
             # stop condition
-            if not self.alive or not jid in self._active_jobs:
+            if not jid in self._active_jobs:
                 return
 
             # set target as new position
             self.coord = self.target
+
+            # reset travel vector -> stabilise get_current_pos
+            self._travel_vector = np.zeros((2))
 
             # claim tile
             tile = map.get_tile(*self.coord)
@@ -151,11 +155,11 @@ class Probe(Entity):
             await JobManager.sleep(0.5)
 
             # stop condition
-            if not self.alive or not jid in self._active_jobs:
+            if not jid in self._active_jobs:
                 return
 
             # get new target
-            target = self._get_new_target()
+            target = self.player.get_probe_farm_target(self)
             if target is None:
                 self.die()
                 return

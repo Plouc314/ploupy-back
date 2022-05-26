@@ -8,7 +8,7 @@ class ActionBuildFactoryModel(BaseModel):
     """Coordinate where to build the factory"""
 
 
-class ActionMoveProbes(BaseModel):
+class ActionMoveProbesModel(BaseModel):
     ids: list[str]
     """List of the ids of each probe to move"""
     targets: list[PointModel]
