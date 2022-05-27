@@ -15,7 +15,7 @@ class TileStateModel(BaseModel):
     id: str
     coord: PointModel | None = None
     owner: str | None = None
-    occupation: int = None
+    occupation: int | None = None
 
 
 class FactoryModel(BaseModel):

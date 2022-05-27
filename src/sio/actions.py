@@ -13,3 +13,8 @@ class ActionMoveProbesModel(BaseModel):
     """List of the ids of each probe to move"""
     targets: list[PointModel]
     """List of the coordinate of each probe target"""
+
+
+class ActionExplodeProbesModel(BaseModel):
+    ids: list[str]
+    """List of the ids of each probe to explode"""

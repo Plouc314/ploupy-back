@@ -9,7 +9,14 @@ from .geometry import Geometry
 from .map import Map
 from .player import Player
 from .exceptions import ActionException
-from .models import GameModel, GameConfig
+from .models import (
+    BuildFactoryResponse,
+    GameModel,
+    GameConfig,
+    GameStateModel,
+    MapStateModel,
+    PlayerStateModel,
+)
 
 
 class Game:
@@ -27,6 +34,8 @@ class Game:
     def _build_players(self) -> list[Player]:
         """
         Build players and their start positions
+
+        Start income job
         """
         self.players = {}
         positions = self._get_start_positions(len(self.users))
@@ -35,6 +44,9 @@ class Game:
             player = Player(user, self.map, self.job_manager, self.config)
             self.players[user.username] = player
             self._build_initial_territory(player, pos)
+
+            job = self.job_manager.make_job("game_state", player.job_income)
+            job.start()
 
         return self.players
 
@@ -52,9 +64,9 @@ class Game:
             positions.append(pos.astype(int))
         return positions
 
-    def _build_initial_territory(self, player: Player, coord: Coord):
+    def _build_initial_territory(self, player: Player, origin: Coord):
         """ """
-        coords = Geometry.square(coord, 3)
+        coords = Geometry.square(origin, 3)
         for coord in coords:
             tile = self.map.get_tile(coord[0], coord[1])
             if tile is None:
@@ -62,7 +74,13 @@ class Game:
             for i in range(5):
                 tile.claim(player)
 
-    def action_build_factory(self, player: Player, coord: PointModel) -> FactoryModel:
+        # build an initial factory
+        player.money += self.config.factory_price
+        player.build_factory(PointModel.from_list(origin))
+
+    def action_build_factory(
+        self, player: Player, coord: PointModel
+    ) -> BuildFactoryResponse:
         """
         Build a factory at the given coord for the given player is possible
 
@@ -85,11 +103,13 @@ class Game:
         job_probe = self.job_manager.make_job("build_probe", factory.job_probe)
         job_probe.start(self.map)
 
-        return factory.model
+        return BuildFactoryResponse(
+            username=player.user.username, money=player.money, factory=factory.model
+        )
 
     def action_move_probes(
         self, player: Player, ids: list[str], targets: list[PointModel]
-    ) -> list[ProbeStateModel]:
+    ) -> GameStateModel:
         """
         Change the target of the probes with the given `ids`
 
@@ -106,12 +126,12 @@ class Game:
             probe = player.get_probe(id)
             if probe is None:
                 continue
-            
+
             # assert that the target is valid
             tile = self.map.get_tile(*target.coord)
             if tile is None:
                 continue
-            
+
             # stop current movement job
             probe.stop_jobs()
 
@@ -124,7 +144,29 @@ class Game:
 
             states.append(probe.get_state())
 
-        return states
+        return GameStateModel(
+            players=[PlayerStateModel(username=player.user.username, probes=states)]
+        )
+
+    def action_explode_probes(self, player: Player, ids: list[str]) -> GameStateModel:
+        """
+        Explode the probes with the given `ids`
+        """
+        probes = []
+        tiles = []
+
+        for id in ids:
+            probe = player.get_probe(id)
+            if probe is None:
+                continue
+
+            tiles += player.explode_probe(probe)
+            probes.append(ProbeStateModel(id=probe.id, alive=probe.alive))
+
+        return GameStateModel(
+            map=MapStateModel(tiles=tiles),
+            players=[PlayerStateModel(username=player.user.username, probes=probes)],
+        )
 
     def get_player(self, username: str) -> Player | None:
         """

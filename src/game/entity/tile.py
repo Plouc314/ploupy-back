@@ -68,7 +68,7 @@ class Tile(Entity):
         """
         return (
             self.building is None
-            # and self.owner is player
+            and self.owner is player
             and self.occupation >= self.config.building_occupation_min
         )
 

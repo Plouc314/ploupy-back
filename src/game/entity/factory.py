@@ -21,16 +21,16 @@ class Factory(Entity):
         self.player = player
         self.config = self.player.config
         self.alive = True
-        
+
         # probes created by the factory
         self._probes: list[Probe] = []
 
-    def remove_prove(self, probe: Probe):
-        '''
+    def remove_probe(self, probe: Probe):
+        """
         Remove a probe from the "ownership" of the factory
         i.e. calling this func will allow the factory to produce
         one more probe.
-        '''
+        """
         if probe in self._probes:
             self._probes.remove(probe)
 
@@ -58,22 +58,26 @@ class Factory(Entity):
         Create Probe instances at regular intervals
         """
         while self.alive:
-            
+
             await JobManager.sleep(2)
-            
+
             # check that the number of probes doesn't exceed the maximum
             if len(self._probes) == self.config.factory_max_probe:
                 continue
-            
+
             pos = self.coord + [0, 1]
             probe = self.player.build_probe(PointModel.from_list(pos))
 
-            # TEMP set probe first target BEFORE sending probe model
+            # check that there was enough money to build the probe
+            if probe is None:
+                continue
+
+            # set probe first target BEFORE sending probe model
             target = self.player.get_probe_farm_target(probe)
             if target is not None:
                 probe.set_target(target)
 
-            probe.factory = self            
+            probe.factory = self
             self._probes.append(probe)
 
             # start probe job
@@ -81,7 +85,9 @@ class Factory(Entity):
             job_move.start(map)
 
             yield BuildProbeResponse(
-                username=self.player.user.username, probe=probe.model
+                username=self.player.user.username,
+                money=self.player.money,
+                probe=probe.model,
             )
 
     def _get_expansion_tiles(self, map: "Map", scope: int) -> list[TileStateModel]:

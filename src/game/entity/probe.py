@@ -46,30 +46,35 @@ class Probe(Entity):
         # jobs flags
         self._active_jobs: set[str] = set()
 
-    def die(self):
+    def die(self, notify_client: bool=True):
         """
-        Make the probe die
-
+        Make the probe die  
         Notify dependencies of the probe
+
+        If `notify_client` is true,
+        send the probe state to the client (require to start a job)
         """
         self.alive = False
 
         self.stop_jobs()
 
-        if self.factory is not None:
-            self.factory.remove_prove(self)
+        self.player.probes.remove(self)
 
-        self.player.job_manager.send(
-            "game_state",
-            GameStateModel(
-                players=[
-                    PlayerStateModel(
-                        username=self.player.user.username,
-                        probes=[ProbeStateModel(id=self.id, alive=False)],
-                    )
-                ],
-            ),
-        )
+        if self.factory is not None:
+            self.factory.remove_probe(self)
+
+        if notify_client:
+            self.player.job_manager.send(
+                "game_state",
+                GameStateModel(
+                    players=[
+                        PlayerStateModel(
+                            username=self.player.user.username,
+                            probes=[ProbeStateModel(id=self.id, alive=False)],
+                        )
+                    ],
+                ),
+            )
 
     def stop_jobs(self):
         """
@@ -97,9 +102,9 @@ class Probe(Entity):
             return
 
         # compute travel time / distance / vector
-        self._travel_distance = np.linalg.norm(self.target - self.coord)
+        self._travel_distance = np.linalg.norm(self.target - self.pos)
         self._travel_duration = self._travel_distance / self.config.probe_speed
-        self._travel_vector = (self.target - self.coord) / self._travel_distance
+        self._travel_vector = (self.target - self.pos) / self._travel_distance
 
     def get_current_pos(self) -> Pos:
         """
@@ -110,7 +115,9 @@ class Probe(Entity):
         return self.pos + self._travel_vector * self.config.probe_speed * t
 
     async def job_move(self, map: "Map"):
-        """ """
+        """
+        Make the probe move to a target, wait, choose a new target, ...
+        """
 
         # create a unique id for the job
         jid = uuid.uuid4().hex
