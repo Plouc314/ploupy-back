@@ -72,6 +72,7 @@ class _LoggerDecorator:
 
         return partial(self._log, name=value)
 
+os.makedirs(LogConfig.root_path)
 
 logged = _LoggerDecorator()
 
