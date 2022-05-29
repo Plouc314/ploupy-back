@@ -19,9 +19,10 @@ class _LoggerDecorator:
         '''
         Write the logging message to the output
         '''
-        filename = os.path.join(LogConfig.root_path, f"{name}.log")
-        with open(filename, "a") as file:
-            file.write(msg)
+        print(msg)
+        # filename = os.path.join(LogConfig.root_path, f"{name}.log")
+        # with open(filename, "a") as file:
+        #     file.write(msg)
 
     def _get_date(self) -> str:
         return datetime.now().strftime("[%d-%m-%y %M:%S]")
@@ -71,8 +72,6 @@ class _LoggerDecorator:
             return self._log(value, LogConfig.default_name)
 
         return partial(self._log, name=value)
-
-os.makedirs(LogConfig.root_path)
 
 logged = _LoggerDecorator()
 
