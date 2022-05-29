@@ -6,16 +6,18 @@ from src.game import (
     Game,
     GameConfig,
     ActionException,
-    BuildFactoryResponse,
-    GameStateModel,
-    PlayerStateModel,
 )
 
 from .sio import sio
 from .client import Client
 from .state import State
 from .job import JobManager
-from .actions import ActionBuildFactoryModel, ActionExplodeProbesModel, ActionMoveProbesModel
+from .actions import (
+    ActionBuildFactoryModel,
+    ActionExplodeProbesModel,
+    ActionMoveProbesModel,
+    ActionProbesAttackModel,
+)
 
 
 app = socketio.ASGIApp(sio)
@@ -72,7 +74,8 @@ async def join_queue(sid: str):
         initial_money=100,
         factory_price=100,
         factory_max_probe=5,
-        building_occupation_min=5,
+        factory_occupation_min=5,
+        factory_build_probe_delay=2,
         max_occupation=10,
         probe_speed=5,
         probe_price=10,
@@ -152,6 +155,7 @@ async def action_move_probes(sid: str, data: dict) -> ResponseModel:
 
     return ResponseModel().dict()
 
+
 @sio.event
 @logged("actions")
 async def action_explode_probes(sid: str, data: dict) -> ResponseModel:
@@ -173,6 +177,35 @@ async def action_explode_probes(sid: str, data: dict) -> ResponseModel:
 
     try:
         response = gs.game.action_explode_probes(player, model.ids)
+    except ActionException as e:
+        return ResponseModel(success=False, msg=str(e)).dict()
+
+    await sio.emit("game_state", response.dict(), to=gs.gid)
+
+    return ResponseModel().dict()
+
+
+@sio.event
+@logged("actions")
+async def action_probes_attack(sid: str, data: dict) -> ResponseModel:
+    """
+    Action that make some probes to attack an opponent
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return
+
+    try:
+        model = ActionProbesAttackModel(**data)
+    except ValidationError as e:
+        return ResponseModel(success=False, msg="Invalid data").dict()
+
+    player = gs.game.get_player(us.user.username)
+
+    try:
+        response = gs.game.action_probes_attack(player, model.ids)
     except ActionException as e:
         return ResponseModel(success=False, msg=str(e)).dict()
 

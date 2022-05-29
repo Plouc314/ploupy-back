@@ -18,3 +18,8 @@ class ActionMoveProbesModel(BaseModel):
 class ActionExplodeProbesModel(BaseModel):
     ids: list[str]
     """List of the ids of each probe to explode"""
+
+
+class ActionProbesAttackModel(BaseModel):
+    ids: list[str]
+    """List of the ids of each probe that will attack"""

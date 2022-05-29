@@ -3,9 +3,8 @@ import numpy as np
 
 from src.core import UserModel, PointModel, Coord
 from src.sio import JobManager
-from src.game.entity.models import FactoryModel, ProbeStateModel
+from src.game.entity.models import FactoryModel, ProbePolicy, ProbeStateModel
 
-from .geometry import Geometry
 from .map import Map
 from .player import Player
 from .exceptions import ActionException
@@ -41,7 +40,7 @@ class Game:
         positions = self._get_start_positions(len(self.users))
 
         for user, pos in zip(self.users.values(), positions):
-            player = Player(user, self.map, self.job_manager, self.config)
+            player = Player(user, self)
             self.players[user.username] = player
             self._build_initial_territory(player, pos)
 
@@ -66,17 +65,22 @@ class Game:
 
     def _build_initial_territory(self, player: Player, origin: Coord):
         """ """
-        coords = Geometry.square(origin, 3)
-        for coord in coords:
-            tile = self.map.get_tile(coord[0], coord[1])
-            if tile is None:
-                continue
-            for i in range(5):
-                tile.claim(player)
+        tile = self.map.get_tile(origin[0], origin[1])
+        if tile is None:
+            raise Exception("Starting position is invalid")
+        
+        for i in range(self.config.factory_occupation_min):
+            tile.claim(player)
 
         # build an initial factory
         player.money += self.config.factory_price
-        player.build_factory(PointModel.from_list(origin))
+        self.action_build_factory(player, PointModel.from_list(origin))
+
+    def get_player(self, username: str) -> Player | None:
+        """
+        Return the player with the given username
+        """
+        return self.players.get(username, None)
 
     def action_build_factory(
         self, player: Player, coord: PointModel
@@ -133,7 +137,7 @@ class Game:
                 continue
 
             # stop current movement job
-            probe.stop_jobs()
+            probe.stop()
 
             # set new target
             probe.set_target(target.coord)
@@ -160,19 +164,46 @@ class Game:
             if probe is None:
                 continue
 
-            tiles += player.explode_probe(probe)
+            tiles += probe.explode(self.map)
             probes.append(ProbeStateModel(id=probe.id, alive=probe.alive))
 
         return GameStateModel(
-            map=MapStateModel(tiles=tiles),
+            map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
             players=[PlayerStateModel(username=player.user.username, probes=probes)],
         )
 
-    def get_player(self, username: str) -> Player | None:
+    def action_probes_attack(self, player: Player, ids: list[str]) -> GameStateModel:
         """
-        Return the player with the given username
+        Make the probes with the given `ids` attack the opponents
         """
-        return self.players.get(username, None)
+        states = []
+
+        for id in ids:
+            probe = player.get_probe(id)
+            if probe is None:
+                continue
+
+            # select a target
+            target = player.get_probe_attack_target(probe)
+
+            # stop current movement job (and potential attack)
+            probe.stop()
+
+            # set probe policy to attack
+            probe.set_policy(ProbePolicy.ATTACK)
+
+            # set new target
+            probe.set_target(target)
+
+            # start new movement job
+            job_move = self.job_manager.make_job("game_state", probe.job_move)
+            job_move.start(self.map)
+
+            states.append(probe.get_state())
+
+        return GameStateModel(
+            players=[PlayerStateModel(username=player.user.username, probes=states)]
+        )
 
     @property
     def model(self) -> GameModel:

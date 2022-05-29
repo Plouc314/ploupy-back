@@ -1,3 +1,4 @@
+from enum import Enum, auto
 from pydantic import BaseModel
 
 from src.core import PointModel, Pos
@@ -42,3 +43,8 @@ class ProbeStateModel(BaseModel):
     pos: PointModel | None = None
     alive: bool | None = None
     target: PointModel | None = None
+
+
+class ProbePolicy(Enum):
+    FARM = auto()
+    ATTACK = auto()

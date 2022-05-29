@@ -1,7 +1,8 @@
+from __future__ import annotations
 import random
-import time
 import uuid
 import numpy as np
+from typing import TYPE_CHECKING
 
 from src.core import UserModel, PointModel, Coord
 from src.sio import JobManager
@@ -22,15 +23,18 @@ from .models import (
 from .map import Map
 from .geometry import Geometry
 
+if TYPE_CHECKING:
+    from .game import Game
 
 class Player:
     def __init__(
-        self, user: UserModel, map: Map, job_manager: JobManager, config: GameConfig
+        self, user: UserModel, game: Game
     ):
         self.user = user
-        self.map = map
-        self.job_manager = job_manager
-        self.config = config
+        self.game = game
+        self.map = game.map
+        self.job_manager = game.job_manager
+        self.config = game.config
         self.money = self.config.initial_money
         self.score = 0
         self.factories: list[Factory] = []
@@ -105,34 +109,6 @@ class Player:
                 return probe
         return None
 
-    def explode_probe(self, probe: Probe) -> list[TileStateModel]:
-        """
-        Make the probe explodes
-        Claim twice the opponent tiles in the neighbourhood
-        Make the probe die (NOTE don't notify client)
-        """
-        # get probe current coord
-        current = np.array(probe.get_current_pos(), dtype=int)
-        tile = self.map.get_tile(*current)
-        if tile is None:
-            # kill the probe
-            probe.die(notify_client=False)
-            return []
-
-        tiles = [tile] + self.map.get_neighbour_tiles(tile)
-        states = []
-
-        for tile in tiles:
-            if tile.owner is not None and tile.owner is not self:
-                tile.claim(self)
-                tile.claim(self)
-                states.append(tile.get_state())
-
-        # kill the probe
-        probe.die(notify_client=False)
-
-        return states
-
     def _get_probe_farm_target(self, coord: Coord) -> Coord | None:
         """
         Return a possible target to farm (own or unoccupied tile)
@@ -191,6 +167,33 @@ class Player:
 
         # if nothing works: return the probe's coord -> wait
         return probe.coord
+
+    def get_probe_attack_target(self, probe: Probe) -> Coord:
+        '''
+        Return a possible target for the probe to attack
+        '''
+        tiles: list[Tile] = []
+        for player in self.game.players.values():
+            if player is self:
+                continue
+            tiles += player.tiles
+        
+        if len(tiles) == 0: # no tile to attack
+            return probe.coord
+
+        coords = np.array([tile.coord for tile in tiles])
+
+        # get closest opponent tile
+        dists = np.linalg.norm(coords - probe.pos, axis=1)
+        idx = np.argmin(dists)
+        tile = tiles[idx]
+
+        # choose one of the tiles in region
+        tiles = self.map.get_neighbour_tiles(tile, 3) + [tile]
+        random.shuffle(tiles)
+        for tile in tiles:
+            if not tile.owner in (None, self):
+                return tile.coord
 
     def _get_tile_income(self, tile: Tile) -> float:
         """

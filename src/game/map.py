@@ -5,6 +5,7 @@ from src.game.entity.tile import Tile
 from .models import MapModel, GameConfig
 from .geometry import Geometry
 
+
 class Map:
     def __init__(self, config: GameConfig):
         self.config = config
@@ -36,17 +37,19 @@ class Map:
             return self._tiles_2d[x][y]
         return None
 
-    def get_neighbour_tiles(self, tile: Tile) -> list[Tile]:
-        '''
+    def get_neighbour_tiles(self, tile: Tile, dist: int = 1) -> list[Tile]:
+        """
         Return the tiles that are neighbour of the `tile`
-        
-        Neighbours as defined by `Geometry.ring(tile.coord, 1)`
-        '''
+
+        Neighbours as defined by `Geometry.square(tile.coord, dist) \ tile`
+        NOTE: the given `tile`is excluded from the neighbour tiles
+        """
         tile = self._tiles_map.get(tile.id, None)
         if tile is None:
             return []
 
-        coords = Geometry.ring(tile.coord, 1)
+        coords = Geometry.square(tile.coord, dist)
+        coords.remove(tuple(tile.coord))
         neighbours = []
 
         for coord in coords:
