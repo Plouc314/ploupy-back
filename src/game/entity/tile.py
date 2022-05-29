@@ -1,13 +1,12 @@
 from __future__ import annotations
 import numpy as np
-from pydantic import BaseModel
 from typing import TYPE_CHECKING
 
 from src.core import PointModel, Coord
 
 from .entity import Entity
 from .factory import Factory
-from .models import TileModel
+from .models import TileModel, TileStateModel
 
 if TYPE_CHECKING:
     from src.game.player import Player
@@ -24,36 +23,52 @@ class Tile(Entity):
         super().__init__(coord)
         self.config = config
         self.building: Factory | None = None
-        self.owner: Player | None = None
+        self._owner: Player | None = None
         self.occupation: int = 0
+
+    @property
+    def owner(self) -> Player | None:
+        return self._owner
 
     @property
     def occupied(self) -> bool:
         """
         Return if the tile is occupied by an player
         """
-        return self.owner is not None and self.occupation > 0
+        return self._owner is not None and self.occupation > 0
 
     def claim(self, player: Player) -> bool:
         """
-        Claim the tile for a player,
-        lower the occupation if occupied by another player,
+        Claim the tile for a player
+        
+        Lower the occupation if occupied by another player,
         else increment it.
 
         Return if the tile is occupied by the given player
         """
-        if self.owner is None:
-            self.owner = player
+        # tile is unoccupied
+        if self._owner is None:
+            self._owner = player
+            self._owner.add_tile(self)
             self.occupation = 1
             return True
 
-        if self.owner is player:
+        # tile is occupied by same player
+        if self._owner is player:
             self.occupation = min(self.occupation + 1, self.config.max_occupation)
             return True
 
+        # tile is occupied by other player
         self.occupation -= 1
         if self.occupation == 0:
-            self.owner = None
+            self._owner.remove_tile(self)
+
+            # in case a building was on the tile -> remove it
+            if self.building is not None:
+                self.building.die()
+                self.building = None
+
+            self._owner = None
 
         return False
 
@@ -63,14 +78,25 @@ class Tile(Entity):
         """
         return (
             self.building is None
-            # and self.owner is player
-            and self.occupation >= self.config.building_occupation_min
+            and self._owner is player
+            and self.occupation >= self.config.factory_occupation_min
+        )
+
+    def get_state(self) -> TileStateModel:
+        '''
+        Return the tile state (occupation and owner)
+        '''
+        return TileStateModel(
+            id=self.id,
+            owner=None if self._owner is None else self._owner.user.username,
+            occupation=self.occupation,
         )
 
     @property
     def model(self) -> TileModel:
         return TileModel(
+            id=self.id,
             coord=PointModel.from_list(self._pos),
-            owner=None if self.owner is None else self.owner.user.username,
+            owner=None if self._owner is None else self._owner.user.username,
             occupation=self.occupation,
         )

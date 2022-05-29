@@ -55,7 +55,7 @@ class State:
         return uuid.uuid4().hex 
 
     def get_game(self, gid: str) -> GameState:
-        return self.games[gid]
+        return self.games.get(gid, None)
 
     def add_game(self, gid: str, game: Game, users: list[UserState]) -> GameState:
         """

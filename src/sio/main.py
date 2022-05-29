@@ -1,23 +1,28 @@
 import socketio
 from pydantic import ValidationError
 
-from src.core import PointModel, ResponseModel, ALLOWED_ORIGINS
-from src.game import Game, GameConfig, ActionException
+from src.core import PointModel, ResponseModel, logged
+from src.game import (
+    Game,
+    GameConfig,
+    ActionException,
+)
 
 from .sio import sio
 from .client import Client
 from .state import State
 from .job import JobManager
-from .response import ActionBuildResponse
-from .actions import ActionBuildModel
+from .actions import (
+    ActionBuildFactoryModel,
+    ActionExplodeProbesModel,
+    ActionMoveProbesModel,
+    ActionProbesAttackModel,
+)
+
 
 app = socketio.ASGIApp(sio)
 
 state = State()
-
-
-def task(msg: str):
-    pass
 
 
 @sio.event
@@ -54,6 +59,10 @@ async def disconnect(sid: str):
 
 @sio.event
 async def join_queue(sid: str):
+    """
+    Make the user join the game queue
+    Start a new game when the queue is full
+    """
     state.queue.append(sid)
     if len(state.queue) < 2:
         return
@@ -62,10 +71,16 @@ async def join_queue(sid: str):
 
     config = GameConfig(
         dim=PointModel(x=21, y=21),
-        initial_money=10,
-        factory_price=0,
-        building_occupation_min=0,
+        initial_money=100,
+        factory_price=100,
+        factory_max_probe=5,
+        factory_occupation_min=5,
+        factory_build_probe_delay=2,
         max_occupation=10,
+        probe_speed=5,
+        probe_price=10,
+        income_rate=0.05,
+        deprecate_rate=0.1,
     )
     job_manager = JobManager(gid)
 
@@ -84,7 +99,11 @@ async def join_queue(sid: str):
 
 
 @sio.event
-async def action_build(sid: str, data: dict) -> ResponseModel:
+@logged("actions")
+async def action_build_factory(sid: str, data: dict) -> ResponseModel:
+    """
+    Action that build a new factory
+    """
     us = state.get_user(sid)
 
     gs = state.get_game(us.gid)
@@ -92,19 +111,104 @@ async def action_build(sid: str, data: dict) -> ResponseModel:
         return
 
     try:
-        action_mod = ActionBuildModel(**data)
+        model = ActionBuildFactoryModel(**data)
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
     player = gs.game.get_player(us.user.username)
 
     try:
-        model = gs.game.build_factory(player, action_mod.coord)
+        response = gs.game.action_build_factory(player, model.coord)
     except ActionException as e:
         return ResponseModel(success=False, msg=str(e)).dict()
 
-    response = ActionBuildResponse(username=us.user.username, factory=model)
+    await sio.emit("build_factory", response.dict(), to=gs.gid)
 
-    await sio.emit("action_build", response.dict(), to=gs.gid)
+    return ResponseModel().dict()
+
+
+@sio.event
+@logged("actions")
+async def action_move_probes(sid: str, data: dict) -> ResponseModel:
+    """
+    Action that change the position of some probes
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return
+
+    try:
+        model = ActionMoveProbesModel(**data)
+    except ValidationError as e:
+        return ResponseModel(success=False, msg="Invalid data").dict()
+
+    player = gs.game.get_player(us.user.username)
+
+    try:
+        response = gs.game.action_move_probes(player, model.ids, model.targets)
+    except ActionException as e:
+        return ResponseModel(success=False, msg=str(e)).dict()
+
+    await sio.emit("game_state", response.dict(), to=gs.gid)
+
+    return ResponseModel().dict()
+
+
+@sio.event
+@logged("actions")
+async def action_explode_probes(sid: str, data: dict) -> ResponseModel:
+    """
+    Action that explode some probes
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return
+
+    try:
+        model = ActionExplodeProbesModel(**data)
+    except ValidationError as e:
+        return ResponseModel(success=False, msg="Invalid data").dict()
+
+    player = gs.game.get_player(us.user.username)
+
+    try:
+        response = gs.game.action_explode_probes(player, model.ids)
+    except ActionException as e:
+        return ResponseModel(success=False, msg=str(e)).dict()
+
+    await sio.emit("game_state", response.dict(), to=gs.gid)
+
+    return ResponseModel().dict()
+
+
+@sio.event
+@logged("actions")
+async def action_probes_attack(sid: str, data: dict) -> ResponseModel:
+    """
+    Action that make some probes to attack an opponent
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return
+
+    try:
+        model = ActionProbesAttackModel(**data)
+    except ValidationError as e:
+        return ResponseModel(success=False, msg="Invalid data").dict()
+
+    player = gs.game.get_player(us.user.username)
+
+    try:
+        response = gs.game.action_probes_attack(player, model.ids)
+    except ActionException as e:
+        return ResponseModel(success=False, msg=str(e)).dict()
+
+    await sio.emit("game_state", response.dict(), to=gs.gid)
 
     return ResponseModel().dict()

@@ -31,7 +31,7 @@ class GameTest(unittest.TestCase):
         tile.owner = p1
         tile.occupation = 5
 
-        model = game.build_factory(p1, PointModel(x=0, y=0))
+        model = game.action_build_factory(p1, PointModel(x=0, y=0))
         self.assertIsNotNone(model)
 
         self.assertEqual(len(p1.factories), 1)
@@ -39,7 +39,7 @@ class GameTest(unittest.TestCase):
         self.assertListEqual(factory.coord.tolist(), [0,0])
         
         try:
-            model = game.build_factory(p2, PointModel(x=0, y=0))
+            model = game.action_build_factory(p2, PointModel(x=0, y=0))
 
             self.assertTrue(False, "Should have raise ActionException")
         except ActionException:
