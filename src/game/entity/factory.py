@@ -25,7 +25,7 @@ class Factory(Entity):
     def __init__(self, player: "Player", coord: Coord):
         super().__init__(coord)
         self.player = player
-        self.config = self.player.config
+        self.config = player.config
         self.alive = True
 
         # probes created by the factory
@@ -70,7 +70,7 @@ class Factory(Entity):
             while len(self._probes) > 0:
                 probe = self._probes.pop()
                 if not factory.receive_probe(probe):
-                    self._probes.append(probe) # add the probe back
+                    self._probes.append(probe)  # add the probe back
                     break
 
         # kill other probes
@@ -119,6 +119,39 @@ class Factory(Entity):
         if probe in self._probes:
             self._probes.remove(probe)
 
+    def get_income(self) -> float:
+        """
+        Compute the expenses of the factory (negative value)
+        """
+        return -len(self._probes) * self.config.probe_maintenance_costs
+
+    def build_probe(self, map: Map, jb: JobManager) -> Probe | None:
+        """
+        Build a new probe (IF possible) and handle all dependencies:
+        - notify self
+        - notify player
+        - start probe job
+        """
+        probe = self.player.build_probe(PointModel.from_list(self.coord))
+
+        # check that there was enough money to build the probe
+        if probe is None:
+            return None
+
+        # set probe first target BEFORE sending probe model
+        target = self.player.get_probe_farm_target(probe)
+        if target is not None:
+            probe.set_target(target)
+
+        probe.factory = self
+        self._probes.append(probe)
+
+        # start probe job
+        job_move = jb.make_job("game_state", probe.job_move)
+        job_move.start(map)
+
+        return probe
+
     async def job_expand(self, map: "Map"):
         """
         Expand the occupation next to the factory in 3 stages
@@ -160,23 +193,11 @@ class Factory(Entity):
             if len(self._probes) == self.config.factory_max_probe:
                 continue
 
-            probe = self.player.build_probe(PointModel.from_list(self.coord))
+            probe = self.build_probe(map, jb)
 
             # check that there was enough money to build the probe
             if probe is None:
                 continue
-
-            # set probe first target BEFORE sending probe model
-            target = self.player.get_probe_farm_target(probe)
-            if target is not None:
-                probe.set_target(target)
-
-            probe.factory = self
-            self._probes.append(probe)
-
-            # start probe job
-            job_move = jb.make_job("game_state", probe.job_move)
-            job_move.start(map)
 
             yield BuildProbeResponse(
                 username=self.player.user.username,

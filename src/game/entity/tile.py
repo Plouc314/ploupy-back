@@ -6,6 +6,7 @@ from src.core import PointModel, Coord
 
 from .entity import Entity
 from .factory import Factory
+from .turret import Turret
 from .models import TileModel, TileStateModel
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ class Tile(Entity):
     def __init__(self, coord: Coord, config: "GameConfig"):
         super().__init__(coord)
         self.config = config
-        self.building: Factory | None = None
+        self.building: Factory | Turret | None = None
         self._owner: Player | None = None
         self.occupation: int = 0
 
@@ -40,7 +41,7 @@ class Tile(Entity):
     def claim(self, player: Player) -> bool:
         """
         Claim the tile for a player
-        
+
         Lower the occupation if occupied by another player,
         else increment it.
 
@@ -82,10 +83,16 @@ class Tile(Entity):
             and self.occupation >= self.config.factory_occupation_min
         )
 
+    def get_income(self) -> float:
+        """
+        Compute the income of the tile
+        """
+        return self.occupation * self.config.income_rate
+
     def get_state(self) -> TileStateModel:
-        '''
+        """
         Return the tile state (occupation and owner)
-        '''
+        """
         return TileStateModel(
             id=self.id,
             owner=None if self._owner is None else self._owner.user.username,

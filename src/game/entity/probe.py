@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 
 
 class Probe(Entity):
-
     def __init__(self, player: "Player", pos: Pos):
         super().__init__(pos)
         self.player = player
@@ -99,10 +98,10 @@ class Probe(Entity):
             )
 
     def set_policy(self, policy: ProbePolicy):
-        '''
+        """
         Set the probe policy
         No side effect (for now)
-        '''
+        """
         self.policy = policy
 
     def set_target(self, target: Coord):
@@ -125,10 +124,10 @@ class Probe(Entity):
         self._travel_vector = (self.target - self.pos) / self._travel_distance
 
     def get_next_target(self) -> Coord:
-        '''
+        """
         Get the next target to go to,
         depending on the current probe policy
-        '''
+        """
         if self.policy == ProbePolicy.FARM:
             return self.player.get_probe_farm_target(self)
         elif self.policy == ProbePolicy.ATTACK:
@@ -172,15 +171,15 @@ class Probe(Entity):
 
         return reached_tiles
 
-    def behave(self, map: Map) -> GameStateModel:
-        '''
+    def behave(self, map: Map) -> GameStateModel | None:
+        """
         Execute what the probe has to do when its arrive on a tile
         depending on the current policy
-        '''
+        """
         tile = map.get_tile(*self.coord)
-        
+
         if self.policy == ProbePolicy.FARM:
-            
+
             tile.claim(self.player)
 
             return GameStateModel(
@@ -198,11 +197,11 @@ class Probe(Entity):
             )
 
         elif self.policy == ProbePolicy.ATTACK:
-            
-            if tile.owner is not None and tile.owner is not self.player:
-                tiles = self.explode(map)
-            else:
-                tiles = []
+
+            if tile.owner is None or tile.owner is self.player:
+                return None
+
+            tiles = self.explode(map)
 
             return GameStateModel(
                 map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
@@ -243,9 +242,12 @@ class Probe(Entity):
             # reset travel vector -> stabilise get_current_pos
             self._travel_vector = np.zeros((2))
 
-            yield self.behave(map)
+            response = self.behave(map)
 
-            await JobManager.sleep(0.5)
+            if response is not None:
+                yield response
+
+            await JobManager.sleep(0.5 if self.policy == ProbePolicy.FARM else 0)
 
             # stop condition
             if not jid in self._active_jobs["move"]:
@@ -254,6 +256,12 @@ class Probe(Entity):
             # get new target
             target = self.get_next_target()
             self.set_target(target)
+
+            # assert that the probe can attack a tile if in attack policy
+            if self.policy == ProbePolicy.ATTACK:
+                # if no tile to attack -> fall back to farm policy
+                if np.all(self.coord == target):
+                    self.policy = ProbePolicy.FARM
 
             yield GameStateModel(
                 players=[

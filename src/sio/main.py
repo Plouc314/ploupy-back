@@ -14,6 +14,7 @@ from .state import State
 from .job import JobManager
 from .actions import (
     ActionBuildFactoryModel,
+    ActionBuildTurretModel,
     ActionExplodeProbesModel,
     ActionMoveProbesModel,
     ActionProbesAttackModel,
@@ -72,6 +73,8 @@ async def join_queue(sid: str):
     config = GameConfig(
         dim=PointModel(x=21, y=21),
         initial_money=100,
+        initial_n_probes=3,
+        base_income=6,
         factory_price=100,
         factory_max_probe=5,
         factory_occupation_min=5,
@@ -79,6 +82,10 @@ async def join_queue(sid: str):
         max_occupation=10,
         probe_speed=5,
         probe_price=10,
+        probe_maintenance_costs=2,
+        turret_price=70,
+        turret_fire_delay=1,
+        turret_scope=3,
         income_rate=0.05,
         deprecate_rate=0.1,
     )
@@ -123,6 +130,35 @@ async def action_build_factory(sid: str, data: dict) -> ResponseModel:
         return ResponseModel(success=False, msg=str(e)).dict()
 
     await sio.emit("build_factory", response.dict(), to=gs.gid)
+
+    return ResponseModel().dict()
+
+
+@sio.event
+@logged("actions")
+async def action_build_turret(sid: str, data: dict) -> ResponseModel:
+    """
+    Action that build a new turret
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return
+
+    try:
+        model = ActionBuildTurretModel(**data)
+    except ValidationError as e:
+        return ResponseModel(success=False, msg="Invalid data").dict()
+
+    player = gs.game.get_player(us.user.username)
+
+    try:
+        response = gs.game.action_build_turret(player, model.coord)
+    except ActionException as e:
+        return ResponseModel(success=False, msg=str(e)).dict()
+
+    await sio.emit("build_turret", response.dict(), to=gs.gid)
 
     return ResponseModel().dict()
 
