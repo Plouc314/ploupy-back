@@ -60,7 +60,7 @@ class Player:
         Raise: ActionException if not enough money
         """
         if self.money < self.config.factory_price:
-            raise ActionException(f"Not enough money ({self.money})")
+            raise ActionException(f"Not enough money (<{self.config.factory_price})")
 
         self.money -= self.config.factory_price
 
@@ -77,7 +77,7 @@ class Player:
         Raise: ActionException if not enough money
         """
         if self.money < self.config.turret_price:
-            raise ActionException(f"Not enough money ({self.money})")
+            raise ActionException(f"Not enough money (<{self.config.turret_price})")
 
         self.money -= self.config.turret_price
 

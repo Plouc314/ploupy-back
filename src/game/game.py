@@ -186,7 +186,7 @@ class Game:
             states.append(probe.get_state())
 
         if len(states) == 0 and len(targets) > 0:
-            raise ActionException("Invalid targets (or probe ids).")
+            raise ActionException("Invalid targets.")
 
         return GameStateModel(
             players=[PlayerStateModel(username=player.user.username, probes=states)]

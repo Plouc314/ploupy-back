@@ -1,6 +1,18 @@
 from pydantic import BaseModel
 
-from src.core import PointModel
+from src.core import PointModel, ResponseModel
+
+
+class ActionCreateQueueModel(BaseModel):
+    n_player: int
+
+
+class ActionJoinQueueModel(BaseModel):
+    qid: str
+
+
+class ActionLeaveQueueModel(BaseModel):
+    qid: str
 
 
 class ActionBuildFactoryModel(BaseModel):
@@ -28,3 +40,13 @@ class ActionExplodeProbesModel(BaseModel):
 class ActionProbesAttackModel(BaseModel):
     ids: list[str]
     """List of the ids of each probe that will attack"""
+
+
+class QueueStateResponse(ResponseModel):
+    qid: str
+    """id of the queue"""
+    active: bool
+    """if the queue is still active"""
+    n_player: int
+    users: list[str]
+    """List of the usernames of the players in the queue"""

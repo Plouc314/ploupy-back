@@ -45,6 +45,10 @@ class GameConfig(BaseModel):
     """
     dimension of the map (unit: coord)
     """
+    n_player: int
+    """
+    number of players in the game
+    """
     initial_money: int
     """
     money players start with
