@@ -10,6 +10,7 @@ from .player import Player
 from .exceptions import ActionException
 from .models import (
     BuildFactoryResponse,
+    BuildTurretResponse,
     GameModel,
     GameConfig,
     GameStateModel,
@@ -76,6 +77,12 @@ class Game:
         player.money += self.config.factory_price
         self.action_build_factory(player, PointModel.from_list(origin))
 
+        # build initial probes
+        factory = player.factories[0]
+        player.money += self.config.initial_n_probes * self.config.probe_price
+        for i in range(self.config.initial_n_probes):
+            factory.build_probe(self.map, self.job_manager)
+
     def get_player(self, username: str) -> Player | None:
         """
         Return the player with the given username
@@ -110,6 +117,32 @@ class Game:
         return BuildFactoryResponse(
             username=player.user.username, money=player.money, factory=factory.model
         )
+    
+    def action_build_turret(
+        self, player: Player, coord: PointModel
+    ) -> BuildTurretResponse:
+        """
+        Build a turret at the given coord for the given player is possible
+
+        Raise: ActionException
+        """
+        tile = self.map.get_tile(*coord.coord)
+        if tile is None:
+            raise ActionException(f"Tile coordinate is invalid ({coord.coord})")
+
+        if not tile.can_build(player):
+            raise ActionException("Cannot build on tile")
+
+        turret = player.build_turret(coord)
+
+        tile.building = turret
+
+        job_fire = self.job_manager.make_job("turret_fire_probe", turret.job_fire)
+        job_fire.start()
+
+        return BuildTurretResponse(
+            username=player.user.username, money=player.money, turret=turret.model
+        )
 
     def action_move_probes(
         self, player: Player, ids: list[str], targets: list[PointModel]
@@ -136,6 +169,10 @@ class Game:
             if tile is None:
                 continue
 
+            # can't move on opponent tile
+            if not tile.owner in (None, player):
+                continue
+
             # stop current movement job
             probe.stop()
 
@@ -147,6 +184,9 @@ class Game:
             job_move.start(self.map)
 
             states.append(probe.get_state())
+
+        if len(states) == 0 and len(targets) > 0:
+            raise ActionException("Invalid targets.")
 
         return GameStateModel(
             players=[PlayerStateModel(username=player.user.username, probes=states)]

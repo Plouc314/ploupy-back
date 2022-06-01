@@ -9,6 +9,8 @@ from src.game.entity.models import (
     FactoryStateModel,
     ProbeModel,
     ProbeStateModel,
+    TurretModel,
+    TurretStateModel,
 )
 
 
@@ -25,6 +27,7 @@ class PlayerModel(BaseModel):
     money: int
     score: int
     factories: list[FactoryModel]
+    turrets: list[TurretStateModel]
     probes: list[ProbeModel]
 
 
@@ -33,6 +36,7 @@ class PlayerStateModel(BaseModel):
     money: int | None = None
     score: int | None = None
     factories: list[FactoryStateModel] = []
+    turrets: list[TurretStateModel] = []
     probes: list[ProbeStateModel] = []
 
 
@@ -41,9 +45,22 @@ class GameConfig(BaseModel):
     """
     dimension of the map (unit: coord)
     """
+    n_player: int
+    """
+    number of players in the game
+    """
     initial_money: int
     """
     money players start with
+    """
+    initial_n_probes: int
+    """
+    initial number of probes to start with (must be smaller
+    than `factory_max_probe`)
+    """
+    base_income: float
+    """
+    base income that each player receive unconditionally
     """
     factory_price: int
     """
@@ -59,7 +76,7 @@ class GameConfig(BaseModel):
     """
     factory_build_probe_delay: float
     """
-    delay to wait to build a probe from the factory
+    delay to wait to build a probe from the factory (sec)
     """
     max_occupation: int
     """
@@ -72,6 +89,22 @@ class GameConfig(BaseModel):
     probe_price: int
     """
     amount to pay to produce one probe
+    """
+    probe_maintenance_costs: float
+    """
+    Costs of possessing one probe (computed in the player's income)
+    """
+    turret_price: int
+    """
+    amount to pay to build a new turret
+    """
+    turret_fire_delay: float
+    """
+    delay to wait for the turret between two fires (sec)
+    """
+    turret_scope: float
+    """
+    scope of the turret (unit: coord)
     """
     income_rate: float
     """
@@ -101,7 +134,19 @@ class BuildFactoryResponse(ResponseModel):
     factory: FactoryModel
 
 
+class BuildTurretResponse(ResponseModel):
+    username: str
+    money: int
+    turret: TurretModel
+
+
 class BuildProbeResponse(ResponseModel):
     username: str
     money: int
     probe: ProbeModel
+
+
+class TurretFireProbeResponse(ResponseModel):
+    username: str
+    turret_id: str
+    probe: ProbeStateModel

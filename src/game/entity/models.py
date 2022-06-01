@@ -48,3 +48,16 @@ class ProbeStateModel(BaseModel):
 class ProbePolicy(Enum):
     FARM = auto()
     ATTACK = auto()
+
+
+class TurretModel(BaseModel):
+    id: str
+    coord: PointModel
+    alive: bool
+
+
+class TurretStateModel(BaseModel):
+    id: str
+    coord: PointModel | None = None
+    alive: bool | None = None
+
