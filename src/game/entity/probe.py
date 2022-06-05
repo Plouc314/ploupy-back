@@ -79,7 +79,8 @@ class Probe(Entity):
 
         self.stop()
 
-        self.player.probes.remove(self)
+        if self in self.player.probes:
+            self.player.probes.remove(self)
 
         if self.factory is not None:
             self.factory.remove_probe(self)
@@ -90,7 +91,7 @@ class Probe(Entity):
                 GameStateModel(
                     players=[
                         PlayerStateModel(
-                            username=self.player.user.username,
+                            username=self.player.username,
                             probes=[ProbeStateModel(id=self.id, alive=False)],
                         )
                     ],
@@ -186,7 +187,7 @@ class Probe(Entity):
                 map=MapStateModel(tiles=[tile.get_state()]),
                 players=[
                     PlayerStateModel(
-                        username=self.player.user.username,
+                        username=self.player.username,
                         probes=[
                             ProbeStateModel(
                                 id=self.id, pos=PointModel.from_list(self.pos)
@@ -207,7 +208,7 @@ class Probe(Entity):
                 map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
                 players=[
                     PlayerStateModel(
-                        username=self.player.user.username,
+                        username=self.player.username,
                         probes=[ProbeStateModel(id=self.id, alive=self.alive)],
                     )
                 ],
@@ -266,7 +267,7 @@ class Probe(Entity):
             yield GameStateModel(
                 players=[
                     PlayerStateModel(
-                        username=self.player.user.username,
+                        username=self.player.username,
                         probes=[
                             ProbeStateModel(
                                 id=self.id, target=PointModel.from_list(self.target)

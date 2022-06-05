@@ -59,7 +59,8 @@ class Turret(Entity):
 
         self.stop()
 
-        self.player.turrets.remove(self)
+        if self in self.player.turrets:
+            self.player.turrets.remove(self)
 
         if notify_client:
             self.player.job_manager.send(
@@ -67,7 +68,7 @@ class Turret(Entity):
                 GameStateModel(
                     players=[
                         PlayerStateModel(
-                            username=self.player.user.username,
+                            username=self.player.username,
                             turrets=[TurretStateModel(id=self.id, alive=False)],
                         )
                     ]
@@ -122,7 +123,7 @@ class Turret(Entity):
             probe.die(notify_client=False)
 
             yield TurretFireProbeResponse(
-                username=self.player.user.username,
+                username=self.player.username,
                 turret_id=self.id,
                 probe=ProbeStateModel(id=probe.id),
             )

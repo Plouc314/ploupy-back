@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from src.core import PointModel, ResponseModel
+from src.core import PointModel, UserModel
 
 from src.game.entity.models import (
     TileModel,
@@ -26,6 +26,7 @@ class PlayerModel(BaseModel):
     username: str
     money: int
     score: int
+    alive: bool
     factories: list[FactoryModel]
     turrets: list[TurretStateModel]
     probes: list[ProbeModel]
@@ -35,6 +36,7 @@ class PlayerStateModel(BaseModel):
     username: str
     money: int | None = None
     score: int | None = None
+    alive: bool | None = None
     factories: list[FactoryStateModel] = []
     turrets: list[TurretStateModel] = []
     probes: list[ProbeStateModel] = []
@@ -128,25 +130,30 @@ class GameStateModel(BaseModel):
     players: list[PlayerStateModel] = []
 
 
-class BuildFactoryResponse(ResponseModel):
+class GameResultResponse(BaseModel):
+    ranking: list[UserModel]
+    '''players: from best to worst'''
+
+
+class BuildFactoryResponse(BaseModel):
     username: str
     money: int
     factory: FactoryModel
 
 
-class BuildTurretResponse(ResponseModel):
+class BuildTurretResponse(BaseModel):
     username: str
     money: int
     turret: TurretModel
 
 
-class BuildProbeResponse(ResponseModel):
+class BuildProbeResponse(BaseModel):
     username: str
     money: int
     probe: ProbeModel
 
 
-class TurretFireProbeResponse(ResponseModel):
+class TurretFireProbeResponse(BaseModel):
     username: str
     turret_id: str
     probe: ProbeStateModel
