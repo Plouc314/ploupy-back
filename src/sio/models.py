@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from src.core import PointModel, ResponseModel
+from src.core import PointModel, ResponseModel, UserModel
 
 
 class ActionCreateQueueModel(BaseModel):
@@ -13,6 +13,10 @@ class ActionJoinQueueModel(BaseModel):
 
 class ActionLeaveQueueModel(BaseModel):
     qid: str
+
+
+class ActionResignGameModel(BaseModel):
+    pass
 
 
 class ActionBuildFactoryModel(BaseModel):
@@ -48,5 +52,5 @@ class QueueStateResponse(ResponseModel):
     active: bool
     """if the queue is still active"""
     n_player: int
-    users: list[str]
-    """List of the usernames of the players in the queue"""
+    users: list[UserModel]
+    """List of the users in the queue"""

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from src.core import UserModel, PointModel, Coord
 from src.sio import JobManager
 
+from src.game.entity.models import FactoryStateModel, TurretStateModel, ProbeStateModel
 from src.game.entity.factory import Factory
 from src.game.entity.turret import Turret
 from src.game.entity.probe import Probe
@@ -14,14 +15,12 @@ from src.game.entity.tile import Tile
 
 from .exceptions import ActionException
 from .models import (
-    GameConfig,
     GameStateModel,
     MapStateModel,
     PlayerModel,
     PlayerStateModel,
     TileStateModel,
 )
-from .map import Map
 from .geometry import Geometry
 
 if TYPE_CHECKING:
@@ -37,6 +36,7 @@ class Player:
         self.config = game.config
         self.money = self.config.initial_money
         self.score = 0
+        self.alive = True
         self.factories: list[Factory] = []
         self.turrets: list[Turret] = []
         self.probes: list[Probe] = []
@@ -45,11 +45,80 @@ class Player:
         # jobs flags
         self._active_jobs: set[str] = set()
 
-    def stop_jobs(self):
+    @property
+    def username(self) -> str:
+        return self.user.username
+
+    def stop(self):
         """
         Terminate all the active jobs
         """
         self._active_jobs.clear()
+
+    def die(self, notify_client: bool = True, is_winner: bool = False):
+        """
+        Make the player die
+        Notify dependencies of the player (factories, turrets, ...)
+
+        If `notify_client` is true,
+        send the player state to the client (require to start a job)
+
+        If `is_winner` (and `notify_client`) are true,
+        send the player state (with all factories / turrets / probes dead)
+        but the player alive.
+        Also, don't notify game of player's death
+        """
+        self.alive = False
+
+        self.stop()
+
+        if not is_winner:
+            self.game.notify_death(self)
+
+        factories = self.factories
+        # clear factories attribute ->
+        # avoid factories to look for probe transfers when dying
+        self.factories = []
+
+        probes: list[Probe] = []
+
+        for factory in factories:
+            probes += factory.die(notify_client=False, check_loose_condition=False)
+
+        turrets = self.turrets.copy()
+        for turret in turrets:
+            turret.die(notify_client=False)
+
+        if notify_client:
+            self.job_manager.send(
+                "game_state",
+                GameStateModel(
+                    players=[
+                        PlayerStateModel(
+                            username=self.user.username,
+                            alive=is_winner,
+                            factories=[
+                                FactoryStateModel(id=factory.id, alive=False)
+                                for factory in factories
+                            ],
+                            turrets=[
+                                TurretStateModel(id=turret.id, alive=False)
+                                for turret in turrets
+                            ],
+                            probes=[
+                                ProbeStateModel(id=probe.id, alive=False)
+                                for probe in probes
+                            ],
+                        )
+                    ],
+                ),
+            )
+
+    def loose_condition(self) -> bool:
+        """
+        Return if the player has lost (i.e. its loose condition is fulfilled)
+        """
+        return len(self.factories) == 0
 
     def build_factory(self, coord: PointModel) -> Factory:
         """
@@ -271,7 +340,7 @@ class Player:
                 return
 
             # update player's money
-            self.money += self.get_income()
+            self.money = max(0, self.money + self.get_income())
 
             # deprecate tiles
             tiles = []
@@ -296,6 +365,7 @@ class Player:
             username=self.user.username,
             money=self.money,
             score=self.score,
+            alive=self.alive,
             factories=[factory.model for factory in self.factories],
             turrets=[turret.model for turret in self.turrets],
             probes=[probe.model for probe in self.probes],

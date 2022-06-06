@@ -44,12 +44,17 @@ class JobManager:
     def __init__(self, gid: str) -> None:
         self.gid = gid
 
-    def send(self, event: str, data: BaseModel) -> None:
+    def send(self, event: str, data: BaseModel, delay: float=0) -> None:
         """
-        Send an event
+        Send an event (ONLY to the users in game)
+
+        Create a job that broadcast the message,
+        if `delay > 0`, wait for the `delay` before sending the message
         """
 
         async def behaviour():
+            if delay > 0:
+                await self.sleep(delay)
             yield data
 
         job = self.make_job(event, behaviour)

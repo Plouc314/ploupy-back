@@ -10,6 +10,11 @@ class UserModel(BaseModel):
     uid: str = ""
     username: str = ""
     email: str = ""
+    avatar: str = ""
+    """
+    Name of the avatar (see ploupy-front `textures.tsx`
+    for possible values)
+    """
 
 
 Coord = list | tuple | np.ndarray

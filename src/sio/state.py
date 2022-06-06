@@ -5,7 +5,7 @@ from src.core import UserModel
 from src.game import Game, GameConfig
 
 from .models import QueueStateResponse
-
+from .sio import sio
 
 class UserState(BaseModel):
     sid: str
@@ -40,7 +40,7 @@ class QueueState(BaseModel):
             qid=self.qid,
             active=self.active,
             n_player=self.config.n_player,
-            users=[user.user.username for user in self.users],
+            users=[user.user for user in self.users],
         )
 
 
@@ -106,3 +106,53 @@ class State:
     def remove_queue(self, qid: str) -> None:
         if qid in self.queues.keys():
             self.queues.pop(qid)
+
+    async def join_queue(self, queue: QueueState, user: UserState) -> bool:
+        '''
+        Add the user to the queue.
+        In case the queue is full:
+        - Make all the users in the queue leave
+            all other queues they may be in.
+        - Remove the queue (call `self.remove_queue`)
+        
+        NOTE: Broadcast all queue changes to clients
+
+        Return if the queue is full
+        '''
+        # add user
+        queue.users.append(user)
+
+        full = False
+
+        if len(queue.users) == queue.config.n_player:
+            full = True
+            self.remove_queue(queue.qid)
+            queue.active = False
+        
+            updated_qs: list[QueueState] = []
+            to_rem_qs: list[QueueState] = []
+            
+            # leave other queues
+            for q in self.queues.values():
+                if q is queue:
+                    continue
+                
+                for user in queue.users:
+                    if user in q.users:
+                        q.users.remove(user)
+                        if not q in updated_qs:
+                            updated_qs.append(q)
+
+                        if len(q.users) == 0 and not q in to_rem_qs:
+                            to_rem_qs.append(q)
+
+            for q in to_rem_qs:
+                self.remove_queue(q.qid)
+
+            # broadcast updated queues
+            for q in updated_qs:
+                await sio.emit("queue_state", q.get_response().dict())
+
+        await sio.emit("queue_state", queue.get_response().dict())
+
+        return full

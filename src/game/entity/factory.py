@@ -46,7 +46,9 @@ class Factory(Entity):
         for key in self._active_jobs.keys():
             self._active_jobs[key] = []
 
-    def die(self, notify_client: bool = True) -> list[Probe]:
+    def die(
+        self, notify_client: bool = True, check_loose_condition: bool = True
+    ) -> list[Probe]:
         """
         Make the factory die
         Notify dependencies of the factory
@@ -55,13 +57,26 @@ class Factory(Entity):
         If `notify_client` is true,
         send the factory state to the client (require to start a job)
 
+        If `check_loose_condition` is true (`notify_client` has to be true),
+        check if the player has still factories left, if not: make the player die
+
         Return the list of probes that died (the ones that counldn't be transfered)
         """
         self.alive = False
 
         self.stop()
 
-        self.player.factories.remove(self)
+        if self in self.player.factories:
+            self.player.factories.remove(self)
+
+        # check loose condition
+        if check_loose_condition and self.player.loose_condition():
+            assert notify_client, "Not implemented"
+            # add back factory -> will be killed by player
+            self.player.factories.append(self)
+            # kill player
+            self.player.die(notify_client=True)
+            return []
 
         # try to transfer existing probes to other factories
         for factory in self.player.factories:
@@ -86,7 +101,7 @@ class Factory(Entity):
                 GameStateModel(
                     players=[
                         PlayerStateModel(
-                            username=self.player.user.username,
+                            username=self.player.username,
                             probes=states,
                             factories=[FactoryStateModel(id=self.id, alive=False)],
                         )
@@ -103,6 +118,8 @@ class Factory(Entity):
         one more probe.
         Return if the factory can receive the probe or not.
         """
+        if not self.alive:
+            return False
         if len(self._probes) == self.config.factory_max_probe:
             return False
         if probe in self._probes:
@@ -200,7 +217,7 @@ class Factory(Entity):
                 continue
 
             yield BuildProbeResponse(
-                username=self.player.user.username,
+                username=self.player.username,
                 money=self.player.money,
                 probe=probe.model,
             )

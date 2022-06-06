@@ -21,6 +21,7 @@ from .models import (
     ActionLeaveQueueModel,
     ActionMoveProbesModel,
     ActionProbesAttackModel,
+    ActionResignGameModel,
     QueueStateResponse,
 )
 
@@ -49,11 +50,13 @@ DEFAULT_CONFIG = {
     "deprecate_rate": 0.1,
 }
 
+
 async def notify_queues_client(sid):
-    await sio.sleep(1)
+    await sio.sleep(0.5)
     # send all queue states
     for queue in state.queues.values():
         await sio.emit("queue_state", queue.get_response().dict(), to=sid)
+
 
 @sio.event
 async def connect(sid: str, environ: dict):
@@ -76,6 +79,7 @@ async def connect(sid: str, environ: dict):
     state.add_user(sid, response.user)
 
     sio.start_background_task(notify_queues_client, sid)
+
 
 @sio.event
 async def disconnect(sid: str):
@@ -139,20 +143,11 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
     if us in queue.users:
         return ResponseModel(success=False, msg=f"Already in queue.").dict()
 
-    queue.users.append(us)
+    # join the queue
+    is_full = await state.join_queue(queue, us)
 
-    # handle case: queue not full
-    if len(queue.users) < queue.config.n_player:
-        # broadcast queue state
-        await sio.emit("queue_state", queue.get_response().dict())
+    if not is_full:
         return ResponseModel().dict()
-
-    # queue full -> remove queue
-    state.remove_queue(queue.qid)
-    queue.active = False
-    
-    # broadcast queue state
-    await sio.emit("queue_state", queue.get_response().dict())
 
     # handle game creation
     gid = state.get_id()
@@ -160,7 +155,12 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
     job_manager = JobManager(gid)
 
     # create game
-    game = Game([user.user for user in queue.users], job_manager, queue.config)
+    game = Game(
+        [user.user for user in queue.users],
+        job_manager,
+        queue.config,
+        lambda game: state.remove_game(gid),  # remove game from state on game end
+    )
     gs = state.add_game(gid, game, queue.users)
 
     # create room
@@ -172,11 +172,12 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
     await sio.emit("start_game", game.model.dict(), to=gs.gid)
     return ResponseModel().dict()
 
+
 @sio.event
 async def leave_queue(sid: str, data: dict) -> ResponseModel:
-    '''
+    """
     Make the user leave the specified queue
-    '''
+    """
     us = state.get_user(sid)
 
     try:
@@ -205,6 +206,33 @@ async def leave_queue(sid: str, data: dict) -> ResponseModel:
     await sio.emit("queue_state", queue.get_response().dict())
     return ResponseModel().dict()
 
+
+@sio.event
+async def action_resign_game(sid: str, data: dict) -> ResponseModel:
+    '''
+    Action that resign the game for a player
+    '''
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return ResponseModel(success=False, msg="Game not found").dict()
+
+    try:
+        model = ActionResignGameModel(**data)
+    except ValidationError as e:
+        return ResponseModel(success=False, msg="Invalid data").dict()
+
+    player = gs.game.get_player(us.user.username)
+
+    try:
+        gs.game.action_resign_game(player)
+    except ActionException as e:
+        return ResponseModel(success=False, msg=str(e)).dict()
+
+    return ResponseModel().dict()
+
+
 @sio.event
 @logged("actions")
 async def action_build_factory(sid: str, data: dict) -> ResponseModel:
@@ -215,7 +243,7 @@ async def action_build_factory(sid: str, data: dict) -> ResponseModel:
 
     gs = state.get_game(us.gid)
     if gs is None:
-        return
+        return ResponseModel(success=False, msg="Game not found").dict()
 
     try:
         model = ActionBuildFactoryModel(**data)
@@ -244,7 +272,7 @@ async def action_build_turret(sid: str, data: dict) -> ResponseModel:
 
     gs = state.get_game(us.gid)
     if gs is None:
-        return
+        return ResponseModel(success=False, msg="Game not found").dict()
 
     try:
         model = ActionBuildTurretModel(**data)
@@ -273,7 +301,7 @@ async def action_move_probes(sid: str, data: dict) -> ResponseModel:
 
     gs = state.get_game(us.gid)
     if gs is None:
-        return
+        return ResponseModel(success=False, msg="Game not found").dict()
 
     try:
         model = ActionMoveProbesModel(**data)
@@ -302,7 +330,7 @@ async def action_explode_probes(sid: str, data: dict) -> ResponseModel:
 
     gs = state.get_game(us.gid)
     if gs is None:
-        return
+        return ResponseModel(success=False, msg="Game not found").dict()
 
     try:
         model = ActionExplodeProbesModel(**data)
@@ -331,7 +359,7 @@ async def action_probes_attack(sid: str, data: dict) -> ResponseModel:
 
     gs = state.get_game(us.gid)
     if gs is None:
-        return
+        return ResponseModel(success=False, msg="Game not found").dict()
 
     try:
         model = ActionProbesAttackModel(**data)
