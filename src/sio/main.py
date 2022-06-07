@@ -35,13 +35,14 @@ DEFAULT_CONFIG = {
     "initial_money": 100,
     "initial_n_probes": 3,
     "base_income": 6,
+    "building_occupation_min": 5,
     "factory_price": 100,
     "factory_max_probe": 5,
-    "factory_occupation_min": 5,
     "factory_build_probe_delay": 2,
     "max_occupation": 10,
     "probe_speed": 5,
     "probe_price": 10,
+    "probe_claim_delay": 0.5,
     "probe_maintenance_costs": 2,
     "turret_price": 70,
     "turret_fire_delay": 1,
@@ -78,16 +79,26 @@ async def connect(sid: str, environ: dict):
 
     state.add_user(sid, response.user)
 
-    sio.start_background_task(notify_queues_client, sid)
+    # sio.start_background_task(notify_queues_client, sid)
 
 
 @sio.event
 async def disconnect(sid: str):
     us = state.get_user(sid)
 
+    to_update_qs = {}
+
     for queue in state.queues.values():
         if us in queue.users:
-            queue.users.remove(us)
+            to_update_qs[queue.qid] = queue
+
+    queue_states = []
+
+    for queue in to_update_qs.values():
+        state.leave_queue(queue, us)
+        queue_states.append(queue.get_state())
+
+    await sio.emit("queue_state", QueueStateResponse(queues=queue_states).dict())
 
     print(us.user.username, "disconnected")
     state.remove_user(sid)
@@ -116,6 +127,16 @@ async def create_queue(sid: str, data: dict) -> ResponseModel:
 
     # notify all users
     await sio.emit("queue_state", qs.get_response().dict())
+
+    return ResponseModel().dict()
+
+
+@sio.event
+async def queue_state(sid: str, data: dict) -> ResponseModel:
+    """
+    Return the current queue state
+    """
+    await sio.emit("queue_state", state.get_queues_state().dict(), to=sid)
 
     return ResponseModel().dict()
 
@@ -195,23 +216,19 @@ async def leave_queue(sid: str, data: dict) -> ResponseModel:
     if not us in queue.users:
         return ResponseModel(success=False, msg=f"Not in queue.").dict()
 
-    # leave queue
-    queue.users.remove(us)
-
-    # check if still someone in queue
-    if len(queue.users) == 0:
-        state.remove_queue(queue.qid)
+    state.leave_queue(queue, us)
 
     # broadcast queue state
     await sio.emit("queue_state", queue.get_response().dict())
+
     return ResponseModel().dict()
 
 
 @sio.event
 async def action_resign_game(sid: str, data: dict) -> ResponseModel:
-    '''
+    """
     Action that resign the game for a player
-    '''
+    """
     us = state.get_user(sid)
 
     gs = state.get_game(us.gid)

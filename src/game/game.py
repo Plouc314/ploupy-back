@@ -84,7 +84,7 @@ class Game:
         if tile is None:
             raise Exception("Starting position is invalid")
 
-        for i in range(self.config.factory_occupation_min):
+        for i in range(self.config.building_occupation_min):
             tile.claim(player)
 
         # build an initial factory

@@ -4,8 +4,9 @@ from pydantic import BaseModel
 from src.core import UserModel
 from src.game import Game, GameConfig
 
-from .models import QueueStateResponse
+from .models import QueueState, QueueStateResponse
 from .sio import sio
+
 
 class UserState(BaseModel):
     sid: str
@@ -25,23 +26,29 @@ class GameState(BaseModel):
         arbitrary_types_allowed = True
 
 
-class QueueState(BaseModel):
+class Queue(BaseModel):
     qid: str
     """queue id"""
     active: bool
     users: list[UserState]
     config: GameConfig
 
-    def get_response(self) -> QueueStateResponse:
+    def get_state(self) -> QueueState:
         """
-        Return the queue, casted as QueueStateResponse
+        Return the queue, casted as QueueState
         """
-        return QueueStateResponse(
+        return QueueState(
             qid=self.qid,
             active=self.active,
             n_player=self.config.n_player,
             users=[user.user for user in self.users],
         )
+
+    def get_response(self) -> QueueStateResponse:
+        """
+        Return a queue state response composed of only this queue
+        """
+        return QueueStateResponse(queues=[self.get_state()])
 
 
 class State:
@@ -51,7 +58,7 @@ class State:
         # keys: game id
         self.games: dict[str, GameState] = {}
         # keys: queue id
-        self.queues: dict[str, QueueState] = {}
+        self.queues: dict[str, Queue] = {}
 
     def get_user(self, sid: str) -> UserState | None:
         return self.users.get(sid, None)
@@ -91,15 +98,15 @@ class State:
         if gid in self.games.keys():
             self.games.pop(gid)
 
-    def get_queue(self, qid: str) -> QueueState | None:
+    def get_queue(self, qid: str) -> Queue | None:
         return self.queues.get(qid, None)
 
-    def add_queue(self, config: GameConfig) -> QueueState:
+    def add_queue(self, config: GameConfig) -> Queue:
         """
         Build an add a new QueueState object
         """
         qid = self.get_id()
-        queue_state = QueueState(qid=qid, active=True, users=[], config=config)
+        queue_state = Queue(qid=qid, active=True, users=[], config=config)
         self.queues[qid] = queue_state
         return queue_state
 
@@ -107,52 +114,73 @@ class State:
         if qid in self.queues.keys():
             self.queues.pop(qid)
 
-    async def join_queue(self, queue: QueueState, user: UserState) -> bool:
-        '''
+    def get_queues_state(self) -> QueueStateResponse:
+        """
+        Return the state of all queues
+        """
+        return QueueStateResponse(
+            queues=[queue.get_state() for queue in self.queues.values()]
+        )
+
+    def leave_queue(self, queue: Queue, user: UserState):
+        """
+        Remove the user from the queue,
+        if no one left in queue, remove it from state queues
+        """
+        # leave queue
+        if user in queue.users:
+            queue.users.remove(user)
+
+        # check if still someone in queue
+        if len(queue.users) == 0:
+            self.remove_queue(queue.qid)
+
+    async def join_queue(self, queue: Queue, user: UserState) -> bool:
+        """
         Add the user to the queue.
         In case the queue is full:
         - Make all the users in the queue leave
             all other queues they may be in.
         - Remove the queue (call `self.remove_queue`)
-        
+
         NOTE: Broadcast all queue changes to clients
 
         Return if the queue is full
-        '''
+        """
         # add user
         queue.users.append(user)
 
-        full = False
+        if len(queue.users) < queue.config.n_player:
+            await sio.emit(
+                "queue_state", QueueStateResponse(queues=[queue.get_state()]).dict()
+            )
+            return False
 
-        if len(queue.users) == queue.config.n_player:
-            full = True
-            self.remove_queue(queue.qid)
-            queue.active = False
-        
-            updated_qs: list[QueueState] = []
-            to_rem_qs: list[QueueState] = []
-            
-            # leave other queues
-            for q in self.queues.values():
-                if q is queue:
-                    continue
-                
-                for user in queue.users:
-                    if user in q.users:
-                        q.users.remove(user)
-                        if not q in updated_qs:
-                            updated_qs.append(q)
+        # queue is full
+        self.remove_queue(queue.qid)
+        queue.active = False
 
-                        if len(q.users) == 0 and not q in to_rem_qs:
-                            to_rem_qs.append(q)
+        updated_qs: list[QueueState] = [queue.get_state()]
+        to_rem_qs: list[Queue] = []
 
-            for q in to_rem_qs:
-                self.remove_queue(q.qid)
+        # leave other queues
+        for q in self.queues.values():
+            if q is queue:
+                continue
 
-            # broadcast updated queues
-            for q in updated_qs:
-                await sio.emit("queue_state", q.get_response().dict())
+            for user in queue.users:
+                if user in q.users:
+                    q.users.remove(user)
+                    if not q in updated_qs:
+                        updated_qs.append(q.get_state())
 
-        await sio.emit("queue_state", queue.get_response().dict())
+                    if len(q.users) == 0 and not q in to_rem_qs:
+                        to_rem_qs.append(q)
 
-        return full
+        for q in to_rem_qs:
+            self.remove_queue(q.qid)
+
+        # broadcast updated queues
+        await sio.emit("queue_state", QueueStateResponse(queues=updated_qs).dict())
+
+        return True

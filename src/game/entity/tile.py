@@ -80,7 +80,7 @@ class Tile(Entity):
         return (
             self.building is None
             and self._owner is player
-            and self.occupation >= self.config.factory_occupation_min
+            and self.occupation >= self.config.building_occupation_min
         )
 
     def get_income(self) -> float:
