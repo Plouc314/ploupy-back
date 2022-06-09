@@ -62,6 +62,8 @@ class Factory(Entity):
 
         Return the list of probes that died (the ones that counldn't be transfered)
         """
+        if not self.alive:
+            return []
         self.alive = False
 
         self.stop()
@@ -110,6 +112,15 @@ class Factory(Entity):
             )
 
         return probes
+
+    @property
+    def is_building_probe(self) -> bool:
+        """
+        Return if the factory is currently building a probe
+        (in `job_probe`), as opposed to waiting (when the factory
+        can't receive one more probe)
+        """
+        return len(self._probes) < self.config.factory_max_probe
 
     def receive_probe(self, probe: Probe) -> bool:
         """

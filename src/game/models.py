@@ -27,6 +27,7 @@ class PlayerModel(BaseModel):
     money: int
     score: int
     alive: bool
+    income: int
     factories: list[FactoryModel]
     turrets: list[TurretStateModel]
     probes: list[ProbeModel]
@@ -37,6 +38,7 @@ class PlayerStateModel(BaseModel):
     money: int | None = None
     score: int | None = None
     alive: bool | None = None
+    income: int | None = None
     factories: list[FactoryStateModel] = []
     turrets: list[TurretStateModel] = []
     probes: list[ProbeStateModel] = []
@@ -112,6 +114,10 @@ class GameConfig(BaseModel):
     turret_scope: float
     """
     scope of the turret (unit: coord)
+    """
+    turret_maintenance_costs: float
+    """
+    Costs of possessing one turret (computed in the player's income)
     """
     income_rate: float
     """

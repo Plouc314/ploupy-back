@@ -30,33 +30,28 @@ app = socketio.ASGIApp(sio)
 
 state = State()
 
-DEFAULT_CONFIG = {
-    "dim": {"x": 21, "y": 21},
-    "initial_money": 100,
-    "initial_n_probes": 3,
-    "base_income": 6,
-    "building_occupation_min": 5,
-    "factory_price": 100,
-    "factory_max_probe": 5,
-    "factory_build_probe_delay": 2,
-    "max_occupation": 10,
-    "probe_speed": 5,
-    "probe_price": 10,
-    "probe_claim_delay": 0.5,
-    "probe_maintenance_costs": 2,
-    "turret_price": 70,
-    "turret_fire_delay": 1,
-    "turret_scope": 3,
-    "income_rate": 0.05,
-    "deprecate_rate": 0.1,
-}
-
-
-async def notify_queues_client(sid):
-    await sio.sleep(0.5)
-    # send all queue states
-    for queue in state.queues.values():
-        await sio.emit("queue_state", queue.get_response().dict(), to=sid)
+DEFAULT_CONFIG = GameConfig(
+    dim=PointModel(x=21, y=21),
+    n_player=2,
+    initial_money=100,
+    initial_n_probes=3,
+    base_income=6,
+    building_occupation_min=5,
+    factory_price=100,
+    factory_max_probe=5,
+    factory_build_probe_delay=2,
+    max_occupation=10,
+    probe_speed=5,
+    probe_price=10,
+    probe_claim_delay=0.5,
+    probe_maintenance_costs=2,
+    turret_price=70,
+    turret_fire_delay=1,
+    turret_scope=3,
+    turret_maintenance_costs=3,
+    income_rate=0.05,
+    deprecate_rate=0.1,
+)
 
 
 @sio.event
@@ -79,28 +74,18 @@ async def connect(sid: str, environ: dict):
 
     state.add_user(sid, response.user)
 
-    # sio.start_background_task(notify_queues_client, sid)
-
 
 @sio.event
 async def disconnect(sid: str):
     us = state.get_user(sid)
 
-    to_update_qs = {}
-
-    for queue in state.queues.values():
-        if us in queue.users:
-            to_update_qs[queue.qid] = queue
-
-    queue_states = []
-
-    for queue in to_update_qs.values():
-        state.leave_queue(queue, us)
-        queue_states.append(queue.get_state())
-
-    await sio.emit("queue_state", QueueStateResponse(queues=queue_states).dict())
-
     print(us.user.username, "disconnected")
+
+    await state.leave_all_queues(us)
+
+    # disconnect from potential active game
+    state.disconnect_from_game(us)
+
     state.remove_user(sid)
 
 
@@ -117,7 +102,7 @@ async def create_queue(sid: str, data: dict) -> ResponseModel:
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
-    config = GameConfig(**DEFAULT_CONFIG | model.dict())
+    config = GameConfig(**DEFAULT_CONFIG.dict() | model.dict())
 
     # create queue
     qs = state.add_queue(config)
@@ -134,7 +119,7 @@ async def create_queue(sid: str, data: dict) -> ResponseModel:
 @sio.event
 async def queue_state(sid: str, data: dict) -> ResponseModel:
     """
-    Return the current queue state
+    Broadcast the current queue state to requesting user
     """
     await sio.emit("queue_state", state.get_queues_state().dict(), to=sid)
 
@@ -170,27 +155,8 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
     if not is_full:
         return ResponseModel().dict()
 
-    # handle game creation
-    gid = state.get_id()
+    await state.create_game(queue.users, queue.config)
 
-    job_manager = JobManager(gid)
-
-    # create game
-    game = Game(
-        [user.user for user in queue.users],
-        job_manager,
-        queue.config,
-        lambda game: state.remove_game(gid),  # remove game from state on game end
-    )
-    gs = state.add_game(gid, game, queue.users)
-
-    # create room
-    for user in queue.users:
-        user.gid = gs.gid
-        sio.enter_room(user.sid, room=gs.gid)
-
-    # broadcast start game event
-    await sio.emit("start_game", game.model.dict(), to=gs.gid)
     return ResponseModel().dict()
 
 
@@ -220,6 +186,49 @@ async def leave_queue(sid: str, data: dict) -> ResponseModel:
 
     # broadcast queue state
     await sio.emit("queue_state", queue.get_response().dict())
+
+    return ResponseModel().dict()
+
+
+@sio.event
+async def is_active_game(sid: str, data: dict) -> ResponseModel:
+    """
+    Check if the user is currently in a game,
+    if it is the case, broadcast a "start_game" event with the
+    current game state to the user
+
+    NOTE: if `us.gid` is not None -> return
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is not None:
+        return ResponseModel().dict()
+
+    gs = state.get_game_by_user(us.user)
+    if gs is None:
+        return ResponseModel().dict()
+
+    state.link_user_to_game(gs, us)
+
+    # broadcast start game event
+    await sio.emit("start_game", gs.game.model.dict(), to=us.sid)
+
+    return ResponseModel().dict()
+
+
+@sio.event
+async def game_state(sid: str, data: dict) -> ResponseModel:
+    """
+    Broadcast the current game state to requesting user
+    """
+    us = state.get_user(sid)
+
+    gs = state.get_game(us.gid)
+    if gs is None:
+        return ResponseModel(success=False, msg="Game not found").dict()
+
+    await sio.emit("game_state", gs.game.model.dict(), to=us.sid)
 
     return ResponseModel().dict()
 

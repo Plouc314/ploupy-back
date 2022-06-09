@@ -82,6 +82,8 @@ class Probe(Entity):
         If `notify_client` is true,
         send the probe state to the client (require to start a job)
         """
+        if not self.alive:
+            return
         self.alive = False
 
         self.stop()
