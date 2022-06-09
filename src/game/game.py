@@ -84,7 +84,7 @@ class Game:
         if tile is None:
             raise Exception("Starting position is invalid")
 
-        for i in range(self.config.factory_occupation_min):
+        for i in range(self.config.building_occupation_min):
             tile.claim(player)
 
         # build an initial factory
@@ -97,36 +97,39 @@ class Game:
         for i in range(self.config.initial_n_probes):
             factory.build_probe(self.map, self.job_manager)
 
-    def end_game(self, delay: float = 0.5):
+    def end_game(self, notify_client: bool = True, delay: float = 0.5):
         """
         End the game (Will only be done once)
 
         Call `_on_end_game`
 
-        Notify client of the game result
+        If `notify_client` is true, notify client of the game result
         (wait for `delay` before sending the response)
         """
         if self.ended:
             return
         self.ended = True
 
-        self._on_end_game(self)
-
         winners: list[Player] = []
 
         for player in self.players.values():
             if player.alive:
                 # kill remaining players
-                player.die(notify_client=True, is_winner=True)
+                player.die(notify_client=notify_client, is_winner=True)
                 winners.append(player)
 
         ranking = winners + self._dead_players[::-1]
 
-        self.job_manager.send(
-            "game_result",
-            GameResultResponse(ranking=[player.user for player in ranking]),
-            delay=delay,
-        )
+        if notify_client:
+            self.job_manager.send(
+                "game_result",
+                GameResultResponse(ranking=[player.user for player in ranking]),
+                delay=delay,
+                on_send=lambda: self._on_end_game(self),
+            )
+        else:
+            # still call on-end-game callback
+            self._on_end_game(self)
 
     def get_player(self, username: str) -> Player | None:
         """
@@ -150,9 +153,9 @@ class Game:
             self.end_game()
 
     def action_resign_game(self, player: Player) -> None:
-        '''
+        """
         Make one player die
-        '''
+        """
         player.die()
 
     def action_build_factory(
@@ -296,7 +299,7 @@ class Game:
         """
         if not player.alive:
             raise ActionException("You are dead ?!")
-            
+
         states = []
 
         for id in ids:

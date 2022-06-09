@@ -55,6 +55,8 @@ class Turret(Entity):
         If `notify_client` is true,
         send the turret state to the client (require to start a job)
         """
+        if not self.alive:
+            return
         self.alive = False
 
         self.stop()
@@ -74,6 +76,12 @@ class Turret(Entity):
                     ]
                 ),
             )
+
+    def get_income(self) -> float:
+        """
+        Compute the expenses of the turret (negative value)
+        """
+        return -self.config.turret_maintenance_costs
 
     def _get_fired_probe(self) -> Probe | None:
         """

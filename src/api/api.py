@@ -30,6 +30,7 @@ def user_data(uid: str | None=None, username: str | None=None) -> ResponseModel:
     """
     Return the user data corresponding to the given uid
     """
+    print(f"{uid=} {username=}")
     user = firebase.get_user(uid=uid, username=username)
     print(user)
     if user is None:

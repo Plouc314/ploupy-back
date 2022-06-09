@@ -1,5 +1,5 @@
 import inspect
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable
 from pydantic import BaseModel
 
 from .sio import sio
@@ -44,18 +44,29 @@ class JobManager:
     def __init__(self, gid: str) -> None:
         self.gid = gid
 
-    def send(self, event: str, data: BaseModel, delay: float=0) -> None:
+    def send(
+        self,
+        event: str,
+        data: BaseModel,
+        delay: float = 0,
+        on_send: Callable | None = None,
+    ) -> None:
         """
         Send an event (ONLY to the users in game)
 
         Create a job that broadcast the message,
         if `delay > 0`, wait for the `delay` before sending the message
+
+        If given, the `on_send` callback will be called after the message was sent
         """
 
         async def behaviour():
             if delay > 0:
                 await self.sleep(delay)
             yield data
+
+            if on_send is not None:
+                on_send()
 
         job = self.make_job(event, behaviour)
         job.start()

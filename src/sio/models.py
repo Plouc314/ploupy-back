@@ -46,7 +46,7 @@ class ActionProbesAttackModel(BaseModel):
     """List of the ids of each probe that will attack"""
 
 
-class QueueStateResponse(ResponseModel):
+class QueueState(BaseModel):
     qid: str
     """id of the queue"""
     active: bool
@@ -54,3 +54,7 @@ class QueueStateResponse(ResponseModel):
     n_player: int
     users: list[UserModel]
     """List of the users in the queue"""
+
+
+class QueueStateResponse(ResponseModel):
+    queues: list[QueueState]

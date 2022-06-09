@@ -28,13 +28,20 @@ class Probe(Entity):
         super().__init__(pos)
         self.player = player
         self.config = player.config
+
+        # the probe target
         self.target: Coord = self.coord
-        """the probe target"""
+
         self.alive = True
         self.policy = ProbePolicy.FARM
 
+        # the factory that created the probe
         self.factory: Factory | None = None
-        """The factory that created the probe"""
+
+        # if the probe is currently claiming a tile
+        # used on farm policy to avoid claiming to fast when
+        # manually moving the probe
+        self.is_claiming = False
 
         # time where the probe started to move to the target
         self._departure_time: float = time.time()
@@ -75,6 +82,8 @@ class Probe(Entity):
         If `notify_client` is true,
         send the probe state to the client (require to start a job)
         """
+        if not self.alive:
+            return
         self.alive = False
 
         self.stop()
@@ -172,6 +181,52 @@ class Probe(Entity):
 
         return reached_tiles
 
+    def _behave_farm(self, tile: Tile, map: Map) -> GameStateModel | None:
+        """
+        Actions of the probe when arriving on a tile on farm policy
+        """
+        # in case the probe is currently claiming, do nothing
+        # this may happen when manually moving the probe thus
+        # having temporarily two job_move active
+        if self.is_claiming:
+            return None
+
+        # set the is claiming flag -> will be up until end of claiming delay
+        self.is_claiming = True
+
+        tile.claim(self.player)
+
+        return GameStateModel(
+            map=MapStateModel(tiles=[tile.get_state()]),
+            players=[
+                PlayerStateModel(
+                    username=self.player.username,
+                    probes=[
+                        ProbeStateModel(id=self.id, pos=PointModel.from_list(self.pos))
+                    ],
+                )
+            ],
+        )
+
+    def _behave_attack(self, tile: Tile, map: Map) -> GameStateModel | None:
+        """
+        Actions of the probe when arriving on a tile on attack policy
+        """
+        if tile.owner is None or tile.owner is self.player:
+            return None
+
+        tiles = self.explode(map)
+
+        return GameStateModel(
+            map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
+            players=[
+                PlayerStateModel(
+                    username=self.player.username,
+                    probes=[ProbeStateModel(id=self.id, alive=self.alive)],
+                )
+            ],
+        )
+
     def behave(self, map: Map) -> GameStateModel | None:
         """
         Execute what the probe has to do when its arrive on a tile
@@ -180,39 +235,9 @@ class Probe(Entity):
         tile = map.get_tile(*self.coord)
 
         if self.policy == ProbePolicy.FARM:
-
-            tile.claim(self.player)
-
-            return GameStateModel(
-                map=MapStateModel(tiles=[tile.get_state()]),
-                players=[
-                    PlayerStateModel(
-                        username=self.player.username,
-                        probes=[
-                            ProbeStateModel(
-                                id=self.id, pos=PointModel.from_list(self.pos)
-                            )
-                        ],
-                    )
-                ],
-            )
-
+            return self._behave_farm(tile, map)
         elif self.policy == ProbePolicy.ATTACK:
-
-            if tile.owner is None or tile.owner is self.player:
-                return None
-
-            tiles = self.explode(map)
-
-            return GameStateModel(
-                map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
-                players=[
-                    PlayerStateModel(
-                        username=self.player.username,
-                        probes=[ProbeStateModel(id=self.id, alive=self.alive)],
-                    )
-                ],
-            )
+            return self._behave_attack(tile, map)
         else:
             raise NotImplementedError()
 
@@ -248,7 +273,14 @@ class Probe(Entity):
             if response is not None:
                 yield response
 
-            await JobManager.sleep(0.5 if self.policy == ProbePolicy.FARM else 0)
+            if self.policy == ProbePolicy.FARM:
+                await JobManager.sleep(self.config.probe_claim_delay)
+
+                # in case response -> the tile was claimed in this job
+                # reset claiming flag -> done here in case this job
+                # is no longer active
+                if response is not None:
+                    self.is_claiming = False
 
             # stop condition
             if not jid in self._active_jobs["move"]:
