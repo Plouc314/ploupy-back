@@ -1,33 +1,58 @@
+from dataclasses import dataclass
+import os
+from typing import TypedDict
+from dotenv import load_dotenv
+
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
-from src.core import UserModel
+from src.core import GameConfig, UserModel, FLAG_DEPLOY
+
+
+if not FLAG_DEPLOY:
+    load_dotenv()
+
+
+@dataclass
+class CacheConfig:
+    game_config: GameConfig | None=None
 
 
 class Firebase:
 
-    URL_DATABASE = (
-        "https://ploupy-6550c-default-rtdb.europe-west1.firebasedatabase.app/"
-    )
-    CERT = {
-        "type": "service_account",
-        "project_id": "ploupy-6550c",
-        "private_key_id": "23ef286075eaa28274b0f2ec6217000c5038b4b0",
-        "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCLObuMeaSyfY8Q\nB7w72MqJJPV+poAGeg7UQ85t+3yHFst4UGMnfVnzDT6mIJq169IAs50RhEdgYnCk\n6Q5jrEHbALwJcZSITZJDR1WJFE+/FIkzZwaPMmxfl0R8p10YTsmqq4ZVSSRDFcEt\nRo8PeEhVnvaVoRupNXRh6bYQEDxDU6shOJzZXJ2bv6hWTwtCxOCIQ7W8cTOqIpwo\nivkjzRjnp8ALRsRNjIjDfMbRu+O9iWVHT8UyB4oOrwpwXzC4fiCvjB2GNGznXVku\nz5vLhn+dCKPcdKHNCT8wRkzNrBabanp1J6Ey1ZWCPSkw6jtf1cGBR/BhMSqg3a+f\nrN5nkLldAgMBAAECggEABcwkpCfYlNonn+pCi1dur6FLW7fBMwPYJDyilu/W8qUf\nWeY3CsjsevN9PVu0NYkZWJAiJT2V30yaFjPiNoJQx7bTHa2OGtLoGUcaJ7ghzfoj\n8HEE0+esnZpl7q7lcIKvYRz9XgXKrcR1I9aBVIqUsIQLDpYD2drw+rbJrweOCtuc\nVpSZU0OkH6sq6bG595BJYZnOFRUgJZYMDdyBmt4H2G0xJzDfXjZZFd5yrNKh8f5o\nrDAs4BjpFKUBrO63AO8guz0v689IiGjWy7R7xSwVCoUqXTk+KtYKNxMdO4qN7yo4\nKftm3LAudyJWRVKER4VOTWgp70L1RToM9CpafwiLPQKBgQC9RoMReDynu+6djmPl\n01A7Ca/DjzUMLnVsYmug4ZqhcqsVtsiYJM1VDpoWpUu6ag/YcbRmvBXkFMaijw3y\nB8qT+a9K44nngPzR+VUQD6OtLKhqt4nAg/BNffcFJFPcKoDQWFHwEBtgG+vln86e\nXQrCY3r2qJf4eI0whf9ocHu/ewKBgQC8TmEgc7OrpMjTipo464nyJUGE5twq+yRz\nCtShZKiYzznd+1+h+R6TdqQpWN+4UsjxPvd7U+l4bXhesVhhVopOS04gfugGyfcp\n0dRGWU72N4JhQdjVFUvgbNyGW2kprQde3D4FLbLgkXzApNPLWSJxBn4lNS881Yvc\nCwPLkyxnBwKBgQCUjEGTtWUNU76bY0Rd/LGsFBchCUTd8Zxw2vGTi1xbt240lYbr\neX65ccNXYJWFkXYsLlkihB0+K1wV+uY7/QdtiXmc8eWqjp5dgSzUdSHFaRYo4zE2\nqZYwi1sSawdx9N2yJo7wNQP3MxK53elAes9V7tNzwK+874gH/DKO2jEU/wKBgQCb\ntjCItkRfbh8HFnjbEqJ6UqZwMLrk69HDM7SKVQM5gTp3vjLhbHAFPrkW27/72rEB\nFLFvEP9hrxw3KW1M6FPr1EehhW92lbHFqhZfqeAqp9IvfFTCNx8MUNi2XYaDiOos\nXfEHNTfSjVvcrS/Z2jYpwlWzjNwn8On7JjyYLXYtJwKBgGRwPmz8ROoKrR0/q+JG\nNTNZF2tAUYiiTzlV5NK8pSSiGm34CsYMaD8Evd5AzGReGSZfbgBZoVqMK4SYDLk+\nDsZeM/cQfH97OudpCjjA7TiuZn+2E/qG8v198Da2R95/daiV7yBxiboOLikdzpVw\nRF2194vdT5fO3+P6Y9rZVXaO\n-----END PRIVATE KEY-----\n",
-        "client_email": "firebase-adminsdk-kw5wq@ploupy-6550c.iam.gserviceaccount.com",
-        "client_id": "109147262036596320669",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-kw5wq%40ploupy-6550c.iam.gserviceaccount.com"
-    }
-
+    URL_DATABASE = os.environ["URL_DATABASE"]
 
     def __init__(self):
         self._initialized = False
         self._cache_users: dict[str, UserModel] = {}
+        self._cache_config = CacheConfig()
         self.auth()
+
+    @staticmethod
+    def _get_certificate() -> dict:
+        """
+        Load the firebase credentials for environment variables
+        """
+        keys = [
+            "type",
+            "project_id",
+            "private_key_id",
+            "private_key",
+            "client_email",
+            "client_id",
+            "auth_uri",
+            "token_uri",
+            "auth_provider_x509_cert_url",
+            "client_x509_cert_url",
+        ]
+        cert = {}
+
+        for key in keys:
+            value = os.environ[f"firebase_{key}".upper()]
+            cert[key] = value
+
+        return cert
 
     def auth(self):
         """
@@ -39,7 +64,7 @@ class Firebase:
             return
         self._initialized = True
 
-        cred = credentials.Certificate(self.CERT)
+        cred = credentials.Certificate(self._get_certificate())
         firebase_admin.initialize_app(cred, {"databaseURL": self.URL_DATABASE})
 
     def create_user(self, user: UserModel) -> None:
@@ -49,7 +74,7 @@ class Firebase:
         # build dict without uid
         data = user.dict()
         data.pop("uid")
-        
+
         # push to db
         db.reference(f"/users/{user.uid}").set(data)
 
@@ -69,7 +94,7 @@ class Firebase:
             # look in cache
             if uid in self._cache_users.keys():
                 return self._cache_users[uid]
-            
+
             # fetch data
             data = db.reference(f"/users/{uid}").get()
 
@@ -87,7 +112,7 @@ class Firebase:
             for user in self._cache_users.values():
                 if user.username == username:
                     return user
-            
+
             # fetch data
             results = (
                 db.reference("/users")
@@ -108,4 +133,20 @@ class Firebase:
             return user
 
         return None
-        
+
+    def get_game_config(self, with_cache: bool=True) -> GameConfig:
+        '''
+        Load the game config from the db,
+        if `with_cache=True`, use a cache
+        '''
+        if with_cache and self._cache_config.game_config is not None:
+            return self._cache_config.game_config
+
+        data = db.reference(f"/config/game-config").get()
+
+        config = GameConfig(**data)
+
+        # store in cache
+        self._cache_config.game_config = config
+
+        return config

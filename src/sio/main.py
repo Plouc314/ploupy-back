@@ -1,17 +1,14 @@
 import socketio
 from pydantic import ValidationError
 
-from src.core import PointModel, ResponseModel, logged
-from src.game import (
-    Game,
-    GameConfig,
-    ActionException,
-)
+from src.core import GameConfig, PointModel, ResponseModel, logged
+from src.game import ActionException
 
 from .sio import sio
 from .client import Client
-from .state import State
-from .job import JobManager
+from .gamemanager import GameManager
+from .queuemanager import QueueManager
+from .usermanager import UserManager
 from .models import (
     ActionBuildFactoryModel,
     ActionBuildTurretModel,
@@ -22,37 +19,14 @@ from .models import (
     ActionMoveProbesModel,
     ActionProbesAttackModel,
     ActionResignGameModel,
-    QueueStateResponse,
 )
 
 
 app = socketio.ASGIApp(sio)
 
-state = State()
-
-DEFAULT_CONFIG = GameConfig(
-    dim=PointModel(x=21, y=21),
-    n_player=2,
-    initial_money=100,
-    initial_n_probes=3,
-    base_income=6,
-    building_occupation_min=5,
-    factory_price=100,
-    factory_max_probe=5,
-    factory_build_probe_delay=2,
-    max_occupation=10,
-    probe_speed=5,
-    probe_price=10,
-    probe_claim_delay=0.5,
-    probe_maintenance_costs=2,
-    turret_price=70,
-    turret_fire_delay=1,
-    turret_scope=3,
-    turret_maintenance_costs=3,
-    income_rate=0.05,
-    deprecate_rate=0.1,
-)
-
+uman = UserManager()
+qman = QueueManager()
+gman = GameManager()
 
 @sio.event
 async def connect(sid: str, environ: dict):
@@ -72,21 +46,21 @@ async def connect(sid: str, environ: dict):
 
     print(response.user.username, "connected")
 
-    state.add_user(sid, response.user)
+    uman.add_user(sid, response.user)
 
 
 @sio.event
 async def disconnect(sid: str):
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
     print(us.user.username, "disconnected")
 
-    await state.leave_all_queues(us)
+    await qman.leave_all_queues(us)
 
     # disconnect from potential active game
-    state.disconnect_from_game(us)
+    gman.disconnect(us)
 
-    state.remove_user(sid)
+    uman.remove_user(sid)
 
 
 @sio.event
@@ -95,23 +69,25 @@ async def create_queue(sid: str, data: dict) -> ResponseModel:
     Create a new queue
     inform connected users
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
     try:
         model = ActionCreateQueueModel(**data)
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
-    config = GameConfig(**DEFAULT_CONFIG.dict() | model.dict())
+    default_config = Client.get_default_game_config().game_config
+
+    config = GameConfig(**default_config.dict() | model.dict())
 
     # create queue
-    qs = state.add_queue(config)
+    qs = qman.add_queue(config)
 
     # add creator user
     qs.users.append(us)
 
     # notify all users
-    await sio.emit("queue_state", qs.get_response().dict())
+    await sio.emit("queue_state", qman.get_queues_response([qs]).dict())
 
     return ResponseModel().dict()
 
@@ -121,7 +97,7 @@ async def queue_state(sid: str, data: dict) -> ResponseModel:
     """
     Broadcast the current queue state to requesting user
     """
-    await sio.emit("queue_state", state.get_queues_state().dict(), to=sid)
+    await sio.emit("queue_state", qman.get_queues_state().dict(), to=sid)
 
     return ResponseModel().dict()
 
@@ -132,14 +108,14 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
     Make the user join the game queue
     Start a new game when the queue is full
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
     try:
         model = ActionJoinQueueModel(**data)
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
-    queue = state.get_queue(model.qid)
+    queue = qman.get_queue(model.qid)
 
     if queue is None:
         return ResponseModel(
@@ -150,12 +126,12 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
         return ResponseModel(success=False, msg=f"Already in queue.").dict()
 
     # join the queue
-    is_full = await state.join_queue(queue, us)
+    is_full = await qman.join_queue(queue, us)
 
     if not is_full:
         return ResponseModel().dict()
 
-    await state.create_game(queue.users, queue.config)
+    await gman.create_game(queue.users, queue.config)
 
     return ResponseModel().dict()
 
@@ -165,14 +141,14 @@ async def leave_queue(sid: str, data: dict) -> ResponseModel:
     """
     Make the user leave the specified queue
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
     try:
         model = ActionLeaveQueueModel(**data)
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
-    queue = state.get_queue(model.qid)
+    queue = qman.get_queue(model.qid)
 
     if queue is None:
         return ResponseModel(
@@ -182,10 +158,10 @@ async def leave_queue(sid: str, data: dict) -> ResponseModel:
     if not us in queue.users:
         return ResponseModel(success=False, msg=f"Not in queue.").dict()
 
-    state.leave_queue(queue, us)
+    qman.leave_queue(queue, us)
 
     # broadcast queue state
-    await sio.emit("queue_state", queue.get_response().dict())
+    await sio.emit("queue_state", qman.get_queues_response([queue]).dict())
 
     return ResponseModel().dict()
 
@@ -199,17 +175,17 @@ async def is_active_game(sid: str, data: dict) -> ResponseModel:
 
     NOTE: if `us.gid` is not None -> return
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is not None:
         return ResponseModel().dict()
 
-    gs = state.get_game_by_user(us.user)
+    gs = gman.get_game(user=us.user)
     if gs is None:
         return ResponseModel().dict()
 
-    state.link_user_to_game(gs, us)
+    gman.link_user_to_game(gs, us)
 
     # broadcast start game event
     await sio.emit("start_game", gs.game.model.dict(), to=us.sid)
@@ -222,9 +198,9 @@ async def game_state(sid: str, data: dict) -> ResponseModel:
     """
     Broadcast the current game state to requesting user
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 
@@ -238,9 +214,9 @@ async def action_resign_game(sid: str, data: dict) -> ResponseModel:
     """
     Action that resign the game for a player
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 
@@ -265,9 +241,9 @@ async def action_build_factory(sid: str, data: dict) -> ResponseModel:
     """
     Action that build a new factory
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 
@@ -294,9 +270,9 @@ async def action_build_turret(sid: str, data: dict) -> ResponseModel:
     """
     Action that build a new turret
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 
@@ -323,9 +299,9 @@ async def action_move_probes(sid: str, data: dict) -> ResponseModel:
     """
     Action that change the position of some probes
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 
@@ -352,9 +328,9 @@ async def action_explode_probes(sid: str, data: dict) -> ResponseModel:
     """
     Action that explode some probes
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 
@@ -381,9 +357,9 @@ async def action_probes_attack(sid: str, data: dict) -> ResponseModel:
     """
     Action that make some probes to attack an opponent
     """
-    us = state.get_user(sid)
+    us = uman.get_user(sid=sid)
 
-    gs = state.get_game(us.gid)
+    gs = gman.get_game(gid=us.gid)
     if gs is None:
         return ResponseModel(success=False, msg="Game not found").dict()
 

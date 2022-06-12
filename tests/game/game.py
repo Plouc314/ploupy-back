@@ -4,8 +4,8 @@ import numpy as np
 
 
 from src.sio import JobManager
-from src.core import UserModel, PointModel
-from src.game import Game, GameConfig, ActionException
+from src.core import GameConfig, UserModel, PointModel
+from src.game import Game, ActionException
 
 
 class GameTest(unittest.TestCase):

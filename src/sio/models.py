@@ -1,6 +1,39 @@
+from __future__ import annotations
 from pydantic import BaseModel
+from typing import TYPE_CHECKING
 
-from src.core import PointModel, ResponseModel, UserModel
+from src.core import GameConfig, PointModel, ResponseModel, UserModel
+from src.game import Game
+
+
+class UserSioModel(BaseModel):
+    sid: str
+    """socketio id for user session"""
+    user: UserModel
+    gid: str | None = None
+    """game id"""
+
+
+class QueueSioModel(BaseModel):
+    qid: str
+    """queue id"""
+    active: bool
+    users: list[UserSioModel]
+    config: GameConfig
+
+
+class GameSioModel(BaseModel):
+    gid: str
+    """game id"""
+    users: list[UserSioModel]
+    '''
+    socket-io users that are currently connected
+    NOTE: no assurance that all players in game are currently connected
+    '''
+    game: Game
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class ActionCreateQueueModel(BaseModel):

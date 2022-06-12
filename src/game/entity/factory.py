@@ -75,6 +75,7 @@ class Factory(Entity):
         if check_loose_condition and self.player.loose_condition():
             assert notify_client, "Not implemented"
             # add back factory -> will be killed by player
+            self.alive = True
             self.player.factories.append(self)
             # kill player
             self.player.die(notify_client=True)

@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 from typing import TYPE_CHECKING
 
-from src.core import PointModel, Coord
+from src.core import GameConfig, PointModel, Coord
 
 from .entity import Entity
 from .factory import Factory
@@ -11,7 +11,6 @@ from .models import TileModel, TileStateModel
 
 if TYPE_CHECKING:
     from src.game.player import Player
-    from src.game.models import GameConfig
 
 
 class Tile(Entity):

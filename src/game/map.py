@@ -1,8 +1,10 @@
 import numpy as np
 
+from src.core import GameConfig
+
 from src.game.entity.tile import Tile
 
-from .models import MapModel, GameConfig
+from .models import MapModel
 from .geometry import Geometry
 
 

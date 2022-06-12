@@ -34,6 +34,8 @@ class Player:
         self.map = game.map
         self.job_manager = game.job_manager
         self.config = game.config
+        self.recorder = game.recorder.dispatch(user.username)
+
         self.money = self.config.initial_money
         self.score = 0
         self.alive = True
@@ -327,14 +329,22 @@ class Player:
     def get_income(self) -> float:
         """
         Compute the income of the player
+
+        Records player metrics (call `_records()`)
         """
         income = self.config.base_income
         for factory in self.factories:
             income += self._get_factory_income(factory)
         for turret in self.turrets:
             income += self._get_turret_income(turret)
+
+        tot_occ = 0
         for tile in self.tiles:
             income += self._get_tile_income(tile)
+            tot_occ += tile.occupation
+
+        self._record(tot_occ)
+
         return income
 
     def _get_income_prediction(self, income: float) -> float:
@@ -348,6 +358,20 @@ class Player:
                     self.config.probe_price / self.config.factory_build_probe_delay
                 )
         return prediction
+
+    def _record(self, occupation: int):
+        """
+        Record player metrics
+
+        Given the total occupation of the player
+        """
+        self.recorder.record(
+            money=int(self.money),
+            occupation=occupation,
+            factories=len(self.factories),
+            turrets=len(self.turrets),
+            probes=len(self.probes),
+        )
 
     async def job_income(self):
         """

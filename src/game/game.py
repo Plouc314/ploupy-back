@@ -1,8 +1,9 @@
+import json
 from typing import Callable
 import numpy as np
 
 
-from src.core import UserModel, PointModel, Coord
+from src.core import UserModel, PointModel, GameConfig, Recorder, Coord
 from src.sio import JobManager
 from src.game.entity.models import FactoryModel, ProbePolicy, ProbeStateModel
 
@@ -13,7 +14,7 @@ from .models import (
     BuildFactoryResponse,
     BuildTurretResponse,
     GameModel,
-    GameConfig,
+    GamePlayerStatsModel,
     GameResultResponse,
     GameStateModel,
     MapStateModel,
@@ -34,6 +35,8 @@ class Game:
         self.config = config
         self.map = Map(config)
         self.players: dict[str, Player] = {}
+
+        self.recorder = Recorder(time_unit=1)
 
         # if the game is finished
         self.ended = False
@@ -118,12 +121,21 @@ class Game:
                 player.die(notify_client=notify_client, is_winner=True)
                 winners.append(player)
 
+        # ranking
         ranking = winners + self._dead_players[::-1]
+
+        # stats
+        data = self.recorder.compile()
+        stats: list[GamePlayerStatsModel] = []
+        for username, raw in data.items():
+            stats.append(GamePlayerStatsModel(username=username, **raw))
 
         if notify_client:
             self.job_manager.send(
                 "game_result",
-                GameResultResponse(ranking=[player.user for player in ranking]),
+                GameResultResponse(
+                    ranking=[player.user for player in ranking], stats=stats
+                ),
                 delay=delay,
                 on_send=lambda: self._on_end_game(self),
             )

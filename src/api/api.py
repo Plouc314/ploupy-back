@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.core import ResponseModel, UserModel, ALLOWED_ORIGINS
 
 from .firebase import Firebase
-from .response import UserResponse
+from .response import GameConfigResponse, UserResponse
 
 # app
 app = FastAPI()
@@ -56,3 +56,11 @@ def create_user(data: UserModel) -> ResponseModel:
 
     return ResponseModel(success=True)
     
+
+@app.get("/api/default-game-config")
+def default_game_config() -> ResponseModel:
+    '''
+    Return the default game config
+    '''
+    config = firebase.get_game_config()
+    return GameConfigResponse(game_config=config)
