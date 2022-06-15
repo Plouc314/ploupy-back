@@ -1,7 +1,8 @@
 import inspect
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator, Callable, Coroutine
 from pydantic import BaseModel
 
+Coroutine
 from .sio import sio
 
 
@@ -43,6 +44,23 @@ class Job:
 class JobManager:
     def __init__(self, gid: str) -> None:
         self.gid = gid
+
+    def execute(
+        self,
+        func: Coroutine,
+        delay: float = 0,
+    ):
+        """
+        Execute the given `func` (must be an aysnc function)
+        after the given delay.
+        """
+
+        async def job():
+            if delay > 0:
+                await self.sleep(delay)
+            await func()
+
+        sio.start_background_task(job)
 
     def send(
         self,

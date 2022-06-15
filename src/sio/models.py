@@ -2,8 +2,8 @@ from __future__ import annotations
 from pydantic import BaseModel
 from typing import TYPE_CHECKING
 
-from src.core import GameConfig, PointModel, ResponseModel, UserModel
-from src.game import Game
+from src.core import GameModeModel, PointModel, ResponseModel, UserModel
+from src.game import Game, GamePlayerStatsModel
 
 
 class UserSioModel(BaseModel):
@@ -19,17 +19,21 @@ class QueueSioModel(BaseModel):
     """queue id"""
     active: bool
     users: list[UserSioModel]
-    config: GameConfig
+    game_mode: GameModeModel
 
 
 class GameSioModel(BaseModel):
     gid: str
     """game id"""
+    mode: GameModeModel
+    """
+    Game mode of the game
+    """
     users: list[UserSioModel]
-    '''
+    """
     socket-io users that are currently connected
     NOTE: no assurance that all players in game are currently connected
-    '''
+    """
     game: Game
 
     class Config:
@@ -37,7 +41,8 @@ class GameSioModel(BaseModel):
 
 
 class ActionCreateQueueModel(BaseModel):
-    n_player: int
+    gmid: str
+    """game mode id"""
 
 
 class ActionJoinQueueModel(BaseModel):
@@ -84,10 +89,25 @@ class QueueState(BaseModel):
     """id of the queue"""
     active: bool
     """if the queue is still active"""
-    n_player: int
+    gmid: str
+    """game mode id"""
     users: list[UserModel]
     """List of the users in the queue"""
 
 
 class QueueStateResponse(ResponseModel):
     queues: list[QueueState]
+
+
+class GameResultsResponse(ResponseModel):
+    ranking: list[UserModel]
+    """players: from best (idx: 0) to worst (idx: -1)"""
+    stats: list[GamePlayerStatsModel]
+    mmrs: list[int]
+    """
+    new mmr of players in game (same order as ranking)
+    """
+    mmr_diffs: list[int]
+    """
+    mmr difference of players in game (same order as ranking)
+    """

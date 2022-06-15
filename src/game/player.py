@@ -4,7 +4,7 @@ import uuid
 import numpy as np
 from typing import TYPE_CHECKING
 
-from src.core import UserModel, PointModel, Coord
+from src.core import UserModel, PointModel, Coord, ActionException
 from src.sio import JobManager
 
 from src.game.entity.models import FactoryStateModel, TurretStateModel, ProbeStateModel
@@ -13,7 +13,6 @@ from src.game.entity.turret import Turret
 from src.game.entity.probe import Probe
 from src.game.entity.tile import Tile
 
-from .exceptions import ActionException
 from .models import (
     GameStateModel,
     MapStateModel,

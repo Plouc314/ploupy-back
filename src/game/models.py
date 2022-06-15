@@ -64,9 +64,9 @@ class GamePlayerStatsModel(BaseModel):
     probes: list[int]
 
 
-class GameResultResponse(BaseModel):
+class GameResultModel(BaseModel):
     ranking: list[UserModel]
-    """players: from best to worst"""
+    """players: from best (idx: 0) to worst (idx: -1)"""
     stats: list[GamePlayerStatsModel]
 
 

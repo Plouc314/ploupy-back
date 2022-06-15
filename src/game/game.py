@@ -1,21 +1,20 @@
-import json
+from functools import partial
 from typing import Callable
 import numpy as np
 
 
-from src.core import UserModel, PointModel, GameConfig, Recorder, Coord
+from src.core import UserModel, PointModel, GameConfig, Recorder, ActionException, Coord
 from src.sio import JobManager
 from src.game.entity.models import FactoryModel, ProbePolicy, ProbeStateModel
 
 from .map import Map
 from .player import Player
-from .exceptions import ActionException
 from .models import (
     BuildFactoryResponse,
     BuildTurretResponse,
     GameModel,
     GamePlayerStatsModel,
-    GameResultResponse,
+    GameResultModel,
     GameStateModel,
     MapStateModel,
     PlayerStateModel,
@@ -28,7 +27,7 @@ class Game:
         users: list[UserModel],
         job_manager: JobManager,
         config: GameConfig,
-        on_end_game: Callable[["Game"], None],
+        on_end_game: Callable[[GameResultModel, bool], None],
     ):
         self.users = {u.username: u for u in users}
         self.job_manager = job_manager
@@ -42,7 +41,7 @@ class Game:
         self.ended = False
 
         # function called when the game ends
-        self._on_end_game = on_end_game
+        self.on_end_game = on_end_game
 
         self._dead_players: list[Player] = []
 
@@ -100,14 +99,14 @@ class Game:
         for i in range(self.config.initial_n_probes):
             factory.build_probe(self.map, self.job_manager)
 
-    def end_game(self, notify_client: bool = True, delay: float = 0.5):
+    def end_game(self, aborted: bool = False, delay: float = 0.5):
         """
         End the game (Will only be done once)
 
-        Call `_on_end_game`
-
-        If `notify_client` is true, notify client of the game result
-        (wait for `delay` before sending the response)
+        - Kill all remaining players
+        - Build GameResults
+        - Wait for delay (in separate job)
+        - Call `on_end_game` (in separate job)
         """
         if self.ended:
             return
@@ -118,7 +117,7 @@ class Game:
         for player in self.players.values():
             if player.alive:
                 # kill remaining players
-                player.die(notify_client=notify_client, is_winner=True)
+                player.die(notify_client=True, is_winner=True)
                 winners.append(player)
 
         # ranking
@@ -130,18 +129,17 @@ class Game:
         for username, raw in data.items():
             stats.append(GamePlayerStatsModel(username=username, **raw))
 
-        if notify_client:
-            self.job_manager.send(
-                "game_result",
-                GameResultResponse(
-                    ranking=[player.user for player in ranking], stats=stats
-                ),
-                delay=delay,
-                on_send=lambda: self._on_end_game(self),
-            )
-        else:
-            # still call on-end-game callback
-            self._on_end_game(self)
+        game_results = GameResultModel(
+            ranking=[player.user for player in ranking], stats=stats
+        )
+
+        # call on_end_game after a delay
+        # on_end_game is responsible to notify client
+        # and overall clean up of game in sio server
+        self.job_manager.execute(
+            partial(self.on_end_game, game_results, aborted),
+            delay=delay,
+        )
 
     def get_player(self, username: str) -> Player | None:
         """

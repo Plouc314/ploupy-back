@@ -1,6 +1,6 @@
 import uuid
 
-from src.core import GameConfig
+from src.core import GameModeModel
 
 from .models import QueueSioModel, QueueState, QueueStateResponse, UserSioModel
 from .sio import sio
@@ -17,7 +17,7 @@ class QueueManager:
         return QueueState(
             qid=queue.qid,
             active=queue.active,
-            n_player=queue.config.n_player,
+            gmid=queue.game_mode.id,
             users=[user.user for user in queue.users],
         )
 
@@ -36,12 +36,12 @@ class QueueManager:
         """
         return self._queues.get(qid, None)
 
-    def add_queue(self, config: GameConfig) -> QueueSioModel:
+    def add_queue(self, game_mode: GameModeModel) -> QueueSioModel:
         """
         Build an add a new QueueSioModel instance
         """
         qid = uuid.uuid4().hex
-        queue_state = QueueSioModel(qid=qid, active=True, users=[], config=config)
+        queue_state = QueueSioModel(qid=qid, active=True, users=[], game_mode=game_mode)
         self._queues[qid] = queue_state
         return queue_state
 
@@ -101,7 +101,7 @@ class QueueManager:
         # add user
         queue.users.append(user)
 
-        if len(queue.users) < queue.config.n_player:
+        if len(queue.users) < queue.game_mode.config.n_player:
             await sio.emit("queue_state", self.get_queues_response([queue]).dict())
             return False
 

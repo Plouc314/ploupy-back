@@ -1,9 +1,11 @@
 import uuid
 
-from src.core import UserModel, GameConfig
-from src.game import Game
+from src.core import UserModel, GameModeModel
+from src.game import Game, GameResultModel
+from src.api import GameResultsAPI
 
-from .models import GameSioModel, UserSioModel
+from .client import client
+from .models import GameResultsResponse, GameSioModel, UserSioModel
 from .sio import sio
 from .job import JobManager
 
@@ -29,12 +31,14 @@ class GameManager:
             return None
         return None
 
-    def add_game(self, gid: str, game: Game, users: list[UserSioModel]) -> GameSioModel:
+    def add_game(
+        self, gid: str, game: Game, users: list[UserSioModel], mode: GameModeModel
+    ) -> GameSioModel:
         """
         Build and add a new GameSioModel instance from the given game
         Return the GameSioModel
         """
-        game_state = GameSioModel(gid=gid, game=game, users=users)
+        game_state = GameSioModel(gid=gid, mode=mode, game=game, users=users)
         self._games[gid] = game_state
         return game_state
 
@@ -49,7 +53,7 @@ class GameManager:
         user.gid = gs.gid
         sio.enter_room(user.sid, room=gs.gid)
 
-    async def create_game(self, users: list[UserSioModel], config: GameConfig):
+    async def create_game(self, users: list[UserSioModel], mode: GameModeModel):
         """
         Create a new Game instance
         - Make all users enters the game room
@@ -63,10 +67,10 @@ class GameManager:
         game = Game(
             [user.user for user in users],
             job_manager,
-            config,
-            lambda g: self.end_game(gid),
+            mode.config,
+            lambda r, a: self.end_game(gid, r, a),
         )
-        gs = self.add_game(gid, game, users)
+        gs = self.add_game(gid, game, users, mode)
 
         # create room
         for user in users:
@@ -75,8 +79,10 @@ class GameManager:
         # broadcast start game event
         await sio.emit("start_game", game.model.dict(), to=gs.gid)
 
-    def end_game(self, gid: str):
+    async def end_game(self, gid: str, results: GameResultModel, aborted: bool):
         """
+        - Post game results on api (if not aborted)
+        - Broadcast game results to players
         - Remove the game state from State
         - Make all users leave the game room
         - Reset game's users gid
@@ -85,6 +91,28 @@ class GameManager:
 
         if gs is None:
             return
+
+        if aborted:
+            mmrs = [0 for _ in results.ranking]
+            mmr_diffs = [0 for _ in results.ranking]
+        else:
+            # notify api of game results
+            response = client.post_game_result(
+                    GameResultsAPI(gmid=gs.mode.id, ranking=[user.uid for user in results.ranking])
+                )
+            mmrs = response.mmrs
+            mmr_diffs = response.mmr_diffs
+
+        # build sio response (merge game/api data)
+        response = GameResultsResponse(
+            ranking=results.ranking,
+            stats=results.stats,
+            mmrs=mmrs,
+            mmr_diffs=mmr_diffs,
+        )
+
+        # broadcast overall response
+        await sio.emit("game_result", response.dict(), to=gid)
 
         # remove game from games
         self._games.pop(gid, None)
@@ -111,6 +139,6 @@ class GameManager:
             if u.sid == user.sid:
                 game.users.remove(u)
                 break
-            
+
         if len(game.users) == 0:
-            game.game.end_game(notify_client=False)
+            game.game.end_game(aborted=True)

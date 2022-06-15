@@ -1,11 +1,10 @@
 import socketio
 from pydantic import ValidationError
 
-from src.core import GameConfig, PointModel, ResponseModel, logged
-from src.game import ActionException
+from src.core import ResponseModel, ActionException, logged
 
 from .sio import sio
-from .client import Client
+from .client import client
 from .gamemanager import GameManager
 from .queuemanager import QueueManager
 from .usermanager import UserManager
@@ -39,7 +38,7 @@ async def connect(sid: str, environ: dict):
     if uid is None:
         return False
 
-    response = Client.get_user_data(uid)
+    response = client.get_user_data(uid)
 
     if not response.success:
         return False
@@ -76,12 +75,13 @@ async def create_queue(sid: str, data: dict) -> ResponseModel:
     except ValidationError as e:
         return ResponseModel(success=False, msg="Invalid data").dict()
 
-    default_config = Client.get_default_game_config().game_config
+    game_mode = client.get_game_mode(id=model.gmid)
 
-    config = GameConfig(**default_config.dict() | model.dict())
+    if game_mode is None:
+        return ResponseModel(success=False, msg=f"Invalid game mode id '{model.gmid}'").dict()
 
     # create queue
-    qs = qman.add_queue(config)
+    qs = qman.add_queue(game_mode)
 
     # add creator user
     qs.users.append(us)
@@ -131,7 +131,7 @@ async def join_queue(sid: str, data: dict) -> ResponseModel:
     if not is_full:
         return ResponseModel().dict()
 
-    await gman.create_game(queue.users, queue.config)
+    await gman.create_game(queue.users, queue.game_mode)
 
     return ResponseModel().dict()
 

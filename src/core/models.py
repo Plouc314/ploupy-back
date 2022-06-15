@@ -1,20 +1,12 @@
+from typing import Literal
 import numpy as np
 from pydantic import BaseModel
 
 
-class UserModel(BaseModel):
-    """
-    Represent a user as stored in the db
-    """
-
-    uid: str = ""
-    username: str = ""
-    email: str = ""
-    avatar: str = ""
-    """
-    Name of the avatar (see ploupy-front `textures.tsx`
-    for possible values)
-    """
+GameModes = Literal["base-2", "base-3", "base-4"]
+"""
+List of all game modes
+"""
 
 
 Coord = list | tuple | np.ndarray
@@ -147,4 +139,61 @@ class GameConfig(BaseModel):
     deprecate_rate: float
     """
     probability that a tile with maximum occupation lose 1 occupation
+    """
+
+
+class UserModel(BaseModel):
+    """
+    Represent a user as stored in the db
+    """
+
+    uid: str
+    username: str
+    email: str
+    avatar: str
+    """
+    Name of the avatar (see ploupy-front `textures.tsx`
+    for possible values)
+    """
+
+
+class GameModeModel(BaseModel):
+    """
+    Represent a game mode
+    """
+
+    id: str
+    name: str
+    config: GameConfig
+
+
+class ConfigModel(BaseModel):
+    """
+    Represent the config node of the db
+    """
+
+    modes: list[GameModeModel]
+
+
+class GeneralStatsModel(BaseModel):
+    """
+    Represent the statistics and ranking of a user
+    in a specific mode, as stored in the db
+    """
+
+    mode: GameModeModel
+    mmr: int
+    scores: list[int]
+
+
+class UserStatsModel(BaseModel):
+    """
+    Represent the statistics and ranking of a user
+    in all the modes
+    """
+
+    uid: str
+    stats: dict[GameModes, GeneralStatsModel]
+    """
+    Keys: name of the mode
     """
