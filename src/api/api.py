@@ -1,17 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.core import ResponseModel, UserModel, FirebaseException, ALLOWED_ORIGINS
+from src.models import core
+from src.models.api import args, responses
+from src.core import FirebaseException, ALLOWED_ORIGINS
 
 import src.api.mmrsystem as mmrsystem
 from .firebase import Firebase
-from .models import (
-    AllGameModeResponse,
-    GameModeResponse,
-    GameResultsAPI,
-    GameResultsAPIResponse,
-    UserResponse,
-)
+
 
 # app
 app = FastAPI()
@@ -33,59 +29,57 @@ def ping():
 
 
 @app.get("/api/user-data")
-def user_data(uid: str | None = None, username: str | None = None) -> ResponseModel:
+def user_data(data: args.UserData) -> responses.UserData:
     """
     Return the user data corresponding to the given uid
     """
-    print(f"{uid=} {username=}")
+    print(f"{data.uid=} {data.username=}")
 
-    user = firebase.get_user(uid=uid, username=username)
+    user = firebase.get_user(uid=data.uid, username=data.username)
     if user is None:
-        return ResponseModel(success=False, msg="User not found.")
+        return core.Response(success=False, msg="User not found.")
 
-    return UserResponse(
+    return responses.UserData(
         success=True,
         user=user,
     )
 
 
 @app.post("/api/create-user")
-def create_user(data: UserModel) -> ResponseModel:
+def create_user(data: args.CreateUser) -> responses.CreateUser:
     """
     Create the user if possible and return if it was succesful
     """
 
     if firebase.get_user(uid=data.uid) is None:
         firebase.create_user(data)
-        return ResponseModel(success=True)
+        return core.Response(success=True)
 
     # user found
-    return ResponseModel(success=False, msg=f"User already exists")
+    return core.Response(success=False, msg=f"User already exists")
 
 
 @app.get("/api/game-mode")
-def game_mode(
-    id: str | None = None, name: str | None = None, all: bool | None = None
-) -> ResponseModel:
+def game_mode(data: args.GameMode) -> responses.GameMode:
     """
     Return the game mode with the given id or name
 
-    If `all=True`, return all the game modes
+    If all = True, return all the game modes
     """
 
-    if all:
-        return AllGameModeResponse(game_modes=firebase.get_game_modes())
+    if data.all:
+        return responses.GameMode(game_modes=firebase.get_game_modes())
 
-    mode = firebase.get_game_mode(id=id, name=name)
+    mode = firebase.get_game_mode(id=data.id)
 
     if mode is None:
-        return ResponseModel(success=False, msg="Mode not found.")
+        return core.Response(success=False, msg="Mode not found.")
 
-    return GameModeResponse(game_mode=mode)
+    return responses.GameMode(game_modes=[mode])
 
 
 @app.post("/api/game-results")
-def game_results(data: GameResultsAPI) -> GameResultsAPIResponse:
+def game_results(data: args.GameResults) -> responses.GameResults:
     """
     Update the stats and mmr of all player in the game
 
@@ -94,7 +88,7 @@ def game_results(data: GameResultsAPI) -> GameResultsAPIResponse:
     mode = firebase.get_game_mode(id=data.gmid)
 
     if mode is None:
-        return ResponseModel(success=False, msg="Mode not found.")
+        return core.Response(success=False, msg="Mode not found.")
 
     mmrs = []
     mmr_diffs = []
@@ -127,7 +121,26 @@ def game_results(data: GameResultsAPI) -> GameResultsAPIResponse:
         except FirebaseException as e:
             continue
 
-    return GameResultsAPIResponse(
+    return responses.GameResults(
         mmrs=mmrs,
         mmr_diffs=mmr_diffs,
+    )
+
+
+@app.get("/api/user-stats")
+def user_stats(data: args.UserStats) -> responses.UserStats:
+    '''
+    Return the user stats
+    '''
+    # get user from db -> assert it exists
+    user = firebase.get_user(uid=data.uid)
+
+    if user is None:
+        return core.Response(success=False, msg=f"Invalid user id '{data.uid}'")
+
+    # get stats
+    stats = firebase.get_user_stats(data.uid)
+
+    return responses.UserStats(
+        stats=list(stats.stats.values()),
     )

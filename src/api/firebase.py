@@ -5,16 +5,8 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
-from src.core import (
-    ConfigModel,
-    GameModeModel,
-    GeneralStatsModel,
-    UserStatsModel,
-    UserModel,
-    GameModes,
-    FirebaseException,
-    FLAG_DEPLOY,
-)
+from src.models import core
+from src.core import FirebaseException, FLAG_DEPLOY
 
 
 if not FLAG_DEPLOY:
@@ -27,8 +19,8 @@ class Firebase:
 
     def __init__(self):
         self._initialized = False
-        self._cache_users: dict[str, UserModel] = {}
-        self._cache_stats: dict[str, UserStatsModel] = {}
+        self._cache_users: dict[str, core.User] = {}
+        self._cache_stats: dict[str, core.UserStats] = {}
         self.auth()
 
         self._config = self.load_config()
@@ -73,23 +65,23 @@ class Firebase:
         cred = credentials.Certificate(self._get_certificate())
         firebase_admin.initialize_app(cred, {"databaseURL": self.URL_DATABASE})
 
-    def load_config(self) -> ConfigModel:
+    def load_config(self) -> core.DBConfig:
         """
         Load the config node of the db
         """
         # load data
         raw = db.reference(f"/config").get()
 
-        # build ConfigModel
+        # build Config
         data: dict = raw["modes"]
         modes = []
         for _id, raw_mode in data.items():
-            mode = GameModeModel(id=_id, **raw_mode)
+            mode = core.GameMode(id=_id, **raw_mode)
             modes.append(mode)
 
-        return ConfigModel(modes=modes)
+        return core.DBConfig(modes=modes)
 
-    def get_game_modes(self) -> list[GameModeModel]:
+    def get_game_modes(self) -> list[core.GameMode]:
         """
         Return all game modes
         """
@@ -97,7 +89,7 @@ class Firebase:
 
     def get_game_mode(
         self, id: str | None = None, name: str | None = None
-    ) -> GameModeModel | None:
+    ) -> core.GameMode | None:
         """
         Return the game mode with the given id / name
         """
@@ -106,7 +98,7 @@ class Firebase:
                 return mode
         return None
 
-    def create_user(self, user: UserModel) -> None:
+    def create_user(self, user: core.User) -> None:
         """
         Create a user in the db
         """
@@ -125,7 +117,7 @@ class Firebase:
         uid: str | None = None,
         username: str | None = None,
         error: str="ignore"
-    ) -> UserModel | None:
+    ) -> core.User | None:
         """
         Get the user from the db given the uid or username
         """
@@ -145,7 +137,7 @@ class Firebase:
                     raise FirebaseException(f"User data not found for uid: '{uid}'")
 
             data["uid"] = uid
-            user = UserModel(**data)
+            user = core.User(**data)
 
             self._cache_users[uid] = user
             return user
@@ -173,25 +165,25 @@ class Firebase:
             for uid, data in results.items():
                 data["uid"] = uid
                 break
-            user = UserModel(**data)
+            user = core.User(**data)
 
             self._cache_users[uid] = user
             return user
 
         return None
 
-    def _get_default_genstats(self, mode: GameModeModel) -> GeneralStatsModel:
+    def _get_default_gmstats(self, mode: core.GameMode) -> core.GameModeStats:
         """
         Build GeneralStatsMode instance for given mode with default values
         """
         # build general stats with 0 occurence in all possible positions
-        return GeneralStatsModel(
+        return core.GameModeStats(
             mode=mode,
             mmr=100,
             scores=[0 for n in range(mode.config.n_player)],
         )
 
-    def get_user_stats(self, uid: str) -> UserStatsModel:
+    def get_user_stats(self, uid: str) -> core.UserStats:
         """
         Get the user stats from the db
         
@@ -205,10 +197,10 @@ class Firebase:
         data: dict = db.reference(f"/stats/{uid}").get()
 
         if data is None:
-            stats = UserStatsModel(
+            stats = core.UserStats(
                 uid=uid,
                 stats={
-                    mode.name: self._get_default_genstats(mode)
+                    mode.name: self._get_default_gmstats(mode)
                     for mode in self._config.modes
                 },
             )
@@ -223,20 +215,20 @@ class Firebase:
                 # get game mode
                 mode = self.get_game_mode(id=_id)
 
-                genstats = GeneralStatsModel(
+                gmstats = core.GameModeStats(
                     mode=mode,
                     mmr=stats["mmr"],
                     scores=stats["scores"],
                 )
-                user_stats[mode.name] = genstats
+                user_stats[mode.name] = gmstats
 
             # fill potentially missing data
             for game_mode in self._game_modes:
                 if not game_mode in user_stats.keys():
                     mode = self.get_game_mode(name=game_mode)
-                    user_stats[mode.name] = self._get_default_genstats(mode)
+                    user_stats[mode.name] = self._get_default_gmstats(mode)
 
-            stats = UserStatsModel(uid=uid, stats=user_stats)
+            stats = core.UserStats(uid=uid, stats=user_stats)
 
         # update cache
         self._cache_stats[uid] = stats
@@ -244,10 +236,10 @@ class Firebase:
 
     def update_user_stats(
         self,
-        user_stats: UserStatsModel | None = None,
+        user_stats: core.UserStats | None = None,
         uid: str | None = None,
         gmid: str | None = None,
-        stats: GeneralStatsModel | None = None,
+        stats: core.GameModeStats | None = None,
     ):
         """
         Update the user stats by giving one of:
@@ -259,10 +251,10 @@ class Firebase:
         if user_stats is not None:
             # build db data
             data = {}
-            for genstats in user_stats.stats.values():
-                data[genstats.mode.id] = {
-                    "mmr": genstats.mmr,
-                    "scores": genstats.scores,
+            for gmstats in user_stats.stats.values():
+                data[gmstats.mode.id] = {
+                    "mmr": gmstats.mmr,
+                    "scores": gmstats.scores,
                 }
 
             # push to db

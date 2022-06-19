@@ -1,22 +1,21 @@
 import uuid
 
-from src.core import UserModel, GameModeModel
-from src.game import Game, GameResultModel
-from src.api import GameResultsAPI
+from src.models import core, game as _g, sio as _s, api as _a
+
+from src.game import Game
 
 from .client import client
-from .models import GameResultsResponse, GameSioModel, UserSioModel
 from .sio import sio
 from .job import JobManager
 
 
 class GameManager:
     def __init__(self):
-        self._games: dict[str, GameSioModel] = {}
+        self._games: dict[str, _s.Game] = {}
 
     def get_game(
-        self, gid: str | None = None, user: UserModel | None = None
-    ) -> GameSioModel | None:
+        self, gid: str | None = None, user: core.User | None = None
+    ) -> _s.Game | None:
         """
         Get a sio game either by gid or by a sid (not necessarily connected),
         return None if game not found
@@ -32,28 +31,28 @@ class GameManager:
         return None
 
     def add_game(
-        self, gid: str, game: Game, users: list[UserSioModel], mode: GameModeModel
-    ) -> GameSioModel:
+        self, gid: str, game: Game, users: list[_s.User], mode: core.GameMode
+    ) -> _s.Game:
         """
-        Build and add a new GameSioModel instance from the given game
-        Return the GameSioModel
+        Build and add a new sio.Game instance from the given game
+        Return the sio.Game
         """
-        game_state = GameSioModel(gid=gid, mode=mode, game=game, users=users)
+        game_state = _s.Game(gid=gid, mode=mode, game=game, users=users)
         self._games[gid] = game_state
         return game_state
 
-    def link_user_to_game(self, gs: GameSioModel, user: UserSioModel):
+    def link_user_to_game(self, gs: _s.Game, user: _s.User):
         """
         - Make user enters the game room
         - Set user `gid` attribute
-        - If not socket-io user in GameSioModel, add it
+        - If not socket-io user in sio.Game, add it
         """
         if not user in gs.users:
             gs.users.append(user)
         user.gid = gs.gid
         sio.enter_room(user.sid, room=gs.gid)
 
-    async def create_game(self, users: list[UserSioModel], mode: GameModeModel):
+    async def create_game(self, users: list[_s.User], mode: core.GameMode):
         """
         Create a new Game instance
         - Make all users enters the game room
@@ -79,7 +78,7 @@ class GameManager:
         # broadcast start game event
         await sio.emit("start_game", game.model.dict(), to=gs.gid)
 
-    async def end_game(self, gid: str, results: GameResultModel, aborted: bool):
+    async def end_game(self, gid: str, results: _g.GameResult, aborted: bool):
         """
         - Post game results on api (if not aborted)
         - Broadcast game results to players
@@ -97,14 +96,16 @@ class GameManager:
             mmr_diffs = [0 for _ in results.ranking]
         else:
             # notify api of game results
-            response = client.post_game_result(
-                    GameResultsAPI(gmid=gs.mode.id, ranking=[user.uid for user in results.ranking])
+            response = await client.post_game_result(
+                _a.args.GameResults(
+                    gmid=gs.mode.id, ranking=[user.uid for user in results.ranking]
                 )
+            )
             mmrs = response.mmrs
             mmr_diffs = response.mmr_diffs
 
         # build sio response (merge game/api data)
-        response = GameResultsResponse(
+        response = _s.responses.GameResults(
             ranking=results.ranking,
             stats=results.stats,
             mmrs=mmrs,
@@ -122,7 +123,7 @@ class GameManager:
             user.gid = None
             sio.leave_room(user.sid, room=gid)
 
-    def disconnect(self, user: UserSioModel):
+    def disconnect(self, user: _s.User):
         """
         Disconnect the (socket-io) user from the game
         NOTE: do NOT RESIGN the game for the user

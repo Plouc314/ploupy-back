@@ -2,7 +2,6 @@ import inspect
 from typing import AsyncGenerator, Callable, Coroutine
 from pydantic import BaseModel
 
-Coroutine
 from .sio import sio
 
 

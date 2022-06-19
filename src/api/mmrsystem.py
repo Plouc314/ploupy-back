@@ -1,7 +1,6 @@
-from src.core import GameModeModel, GeneralStatsModel
+from src.models import core
 
-
-def get_mmr_diff(genstats: GeneralStatsModel, mode: GameModeModel, ranking: int) -> int:
+def get_mmr_diff(genstats: core.GameModeStats, mode: core.GameMode, ranking: int) -> int:
     """
     Compute the mmr difference
 

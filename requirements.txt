@@ -5,4 +5,5 @@ gunicorn
 numpy
 pandas
 python-socketio
-requests
+aiohttp
+aiodns

@@ -1,13 +1,10 @@
 from pydantic import BaseModel
-import requests
+import aiohttp
 
-from src.core import ResponseModel, GameModeModel, FLAG_DEPLOY
-from src.api import GameResultsAPI, GameResultsAPIResponse
-from src.api import (
-    UserResponse,
-    AllGameModeResponse,
-    GameModeResponse,
-)
+from src.models import core
+from src.models.api import args, responses
+
+from src.core import FLAG_DEPLOY
 
 
 class Client:
@@ -18,72 +15,74 @@ class Client:
     URL = URL_DEPLOY if FLAG_DEPLOY else URL_DEV
 
     def __init__(self):
-        self._game_modes: dict[str, GameModeModel] = {}
 
-        # load game modes
-        modes = self.get_game_mode(all=True)
-        for mode in modes:
-            self._game_modes[mode.id] = mode
+        # wait to create session instance inside a async func
+        # https://stackoverflow.com/questions/52232177/runtimeerror-timeout-context-manager-should-be-used-inside-a-task
+        self.session: aiohttp.ClientSession = None
+        self._game_modes: dict[str, core.GameMode] = {}
 
-    def get(self, endpoint: str, args: dict) -> dict | None:
+    async def get(self, endpoint: str, data: BaseModel | dict) -> dict | None:
         """
         Send a GET requests to the api
         """
-        url = f"{self.URL}{endpoint}?"
-        # append formatted args
-        url += "&".join(map(lambda v: f"{v[0]}={v[1]}", args.items()))
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
 
-        try:
-            response = requests.get(url)
-        except requests.ConnectionError as e:
-            return None
-
-        if response.status_code != 200:
-            return None
-
-        data = response.json()
-
-        if not data.get("success", False):
-            return None
-
-        return data
-
-    def post(self, endpoint: str, data: BaseModel | dict) -> dict | None:
-        """
-        Send a POST requests to the api
-        """
         url = f"{self.URL}{endpoint}"
 
         if isinstance(data, BaseModel):
             data = data.dict()
 
         try:
-            response = requests.post(url, json=data)
-        except requests.ConnectionError as e:
+            async with self.session.get(url, json=data) as response:
+                if response.status != 200:
+                    return None
+                data = await response.json()
+        except aiohttp.ClientError as e:
             return None
-
-        if response.status_code != 200:
-            return None
-
-        data = response.json()
 
         if not data.get("success", False):
             return None
 
         return data
 
-    def get_user_data(self, uid: str) -> UserResponse:
+    async def post(self, endpoint: str, data: BaseModel | dict) -> dict | None:
+        """
+        Send a POST requests to the api
+        """
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+
+        url = f"{self.URL}{endpoint}"
+
+        if isinstance(data, BaseModel):
+            data = data.dict()
+
+        try:
+            async with self.session.post(url, json=data) as response:
+                if response.status != 200:
+                    return None
+                data = await response.json()
+        except aiohttp.ClientError as e:
+            return None
+
+        if not data.get("success", False):
+            return None
+
+        return data
+
+    async def get_user_data(self, uid: str) -> responses.UserData | None:
         """
         Return the value of the `user-data` endpoint
         """
-        response = self.get("user-data", {"uid": uid})
+        response = await self.get("user-data", args.UserData(uid=uid))
         if response is None:
-            return ResponseModel(success=False)
-        return UserResponse(**response)
+            return None
+        return responses.UserData(**response)
 
-    def get_game_mode(
+    async def get_game_mode(
         self, id: str | None = None, all: bool | None = None
-    ) -> GameModeModel | list[GameModeModel] | None:
+    ) -> core.GameMode | list[core.GameMode] | None:
         """
         Return the game mode with the given id
         or all the game modes (`all=True`)
@@ -91,32 +90,34 @@ class Client:
         if not all and id in self._game_modes.keys():
             return self._game_modes[id]
 
-        response = self.get("game-mode", {"id": id, "all": all})
+        response = await self.get("game-mode", args.GameMode(id=id, all=all))
         if response is None:
             return None
 
+        response = responses.GameMode(**response)
+
+        # update cache
+        for mode in response.game_modes:
+            if not id in self._game_modes.keys():
+                self._game_modes[id] = mode
+
         if all:
-            r = AllGameModeResponse(**response)
-            if r.success:
-                return r.game_modes
-            return []
+            return response.game_modes
+        return response.game_modes[0]
 
-        r = GameModeResponse(**response)
-        if r.success:
-            return r.game_mode
-        return None
-
-    def post_game_result(self, data: GameResultsAPI) -> GameResultsAPIResponse | None:
+    async def post_game_result(
+        self, data: args.GameResults
+    ) -> responses.GameResults | None:
         """
         Post game results on the api
 
         Return api response
         """
-        response = self.post("game-results", data)
+        response = await self.post("game-results", data)
         if response is None:
             return None
 
-        return GameResultsAPIResponse(**response)
+        return responses.GameResults(**response)
 
 
 client = Client()

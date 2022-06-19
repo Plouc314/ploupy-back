@@ -1,6 +1,6 @@
-from typing import Literal
 import numpy as np
 from pydantic import BaseModel
+from typing import Literal
 
 
 GameModes = Literal["base-2", "base-3", "base-4"]
@@ -13,7 +13,7 @@ Coord = list | tuple | np.ndarray
 Pos = list | tuple | np.ndarray
 
 
-class PointModel(BaseModel):
+class Point(BaseModel):
     """
     Represent a point in 2D
     """
@@ -22,11 +22,11 @@ class PointModel(BaseModel):
     y: float
 
     @classmethod
-    def from_list(cls, point: Pos) -> "PointModel":
+    def from_list(cls, point: Pos) -> "Point":
         """
-        Build an instance of PointModel from a list
+        Build an instance of Point from a list
         """
-        return PointModel(x=point[0], y=point[1])
+        return Point(x=point[0], y=point[1])
 
     @property
     def coord(self) -> np.ndarray:
@@ -43,7 +43,7 @@ class PointModel(BaseModel):
         return np.array([self.x, self.y], dtype=float)
 
 
-class ResponseModel(BaseModel):
+class Response(BaseModel):
     """
     Represent a response from a server (api/sio)
     """
@@ -57,7 +57,7 @@ class GameConfig(BaseModel):
     Global configuration of the game
     """
 
-    dim: PointModel
+    dim: Point
     """
     dimension of the map (unit: coord)
     """
@@ -142,9 +142,9 @@ class GameConfig(BaseModel):
     """
 
 
-class UserModel(BaseModel):
+class User(BaseModel):
     """
-    Represent a user as stored in the db
+    Represent a user general informations
     """
 
     uid: str
@@ -152,12 +152,12 @@ class UserModel(BaseModel):
     email: str
     avatar: str
     """
-    Name of the avatar (see ploupy-front `textures.tsx`
-    for possible values)
+    Name of the avatar
+    (see ploupy-front `textures.tsx` for possible values)
     """
 
 
-class GameModeModel(BaseModel):
+class GameMode(BaseModel):
     """
     Represent a game mode
     """
@@ -167,33 +167,33 @@ class GameModeModel(BaseModel):
     config: GameConfig
 
 
-class ConfigModel(BaseModel):
+class DBConfig(BaseModel):
     """
     Represent the config node of the db
     """
 
-    modes: list[GameModeModel]
+    modes: list[GameMode]
 
 
-class GeneralStatsModel(BaseModel):
+class GameModeStats(BaseModel):
     """
     Represent the statistics and ranking of a user
-    in a specific mode, as stored in the db
+    in a specific mode
     """
 
-    mode: GameModeModel
+    mode: GameMode
     mmr: int
     scores: list[int]
 
 
-class UserStatsModel(BaseModel):
+class UserStats(BaseModel):
     """
     Represent the statistics and ranking of a user
     in all the modes
     """
 
     uid: str
-    stats: dict[GameModes, GeneralStatsModel]
+    stats: list[GameModeStats]
     """
-    Keys: name of the mode
+    list of all the game mode's stats
     """

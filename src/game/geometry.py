@@ -1,13 +1,12 @@
 import itertools
 import functools
-import numpy as np
 
-from src.core import Coord
+from src.models import core as _c
 
 
 class Geometry:
     @staticmethod
-    def translate(coords: set[Coord], vector: Coord) -> set[Coord]:
+    def translate(coords: set[_c.Coord], vector: _c.Coord) -> set[_c.Coord]:
         """
         Return the set of `coords` each translated by `vector`
 
@@ -18,7 +17,7 @@ class Geometry:
 
     @functools.lru_cache
     @staticmethod
-    def _ring(distance: int) -> set[Coord]:
+    def _ring(distance: int) -> set[_c.Coord]:
         """
         Actual implementation of `ring`
         """
@@ -62,7 +61,7 @@ class Geometry:
 
     @functools.lru_cache
     @staticmethod
-    def _square(distance: int) -> set[Coord]:
+    def _square(distance: int) -> set[_c.Coord]:
         """
         Actual implementation of `square`
         """
@@ -72,7 +71,7 @@ class Geometry:
         return coords
 
     @staticmethod
-    def ring(origin: Coord, distance: int) -> set[Coord]:
+    def ring(origin: _c.Coord, distance: int) -> set[_c.Coord]:
         """
         Return the coordinates at `distance` of the origin,
         in a square shape:
@@ -90,7 +89,7 @@ class Geometry:
         return Geometry.translate(Geometry._ring(distance), origin)
 
     @staticmethod
-    def square(origin: Coord, distance: int) -> set[Coord]:
+    def square(origin: _c.Coord, distance: int) -> set[_c.Coord]:
         """
         Return the coordinates from `distance` of the origin,
         in a square shape:
