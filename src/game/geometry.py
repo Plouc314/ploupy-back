@@ -1,7 +1,7 @@
 import itertools
 import functools
 
-from src.models import core as _c
+from models import core as _c
 
 
 class Geometry:

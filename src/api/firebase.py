@@ -5,8 +5,8 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
-from src.models import core
-from src.core import FirebaseException, FLAG_DEPLOY
+from models import core
+from core import FirebaseException, FLAG_DEPLOY
 
 
 if not FLAG_DEPLOY:
@@ -24,8 +24,8 @@ class Firebase:
         self.auth()
 
         self._config = self.load_config()
-        # list of game modes names
-        self._game_modes = [mode.name for mode in self._config.modes]
+        # list of game modes ids
+        self._gmids = [mode.id for mode in self._config.modes]
 
     @staticmethod
     def _get_certificate() -> dict:
@@ -207,7 +207,7 @@ class Firebase:
 
         else:
             # build UserStats (see schemas.d.ts for db structure)
-            user_stats = {}
+            user_stats: dict[str, core.GameModeStats] = {}
 
             # build using db data
             for _id, stats in data.items():
@@ -220,13 +220,13 @@ class Firebase:
                     mmr=stats["mmr"],
                     scores=stats["scores"],
                 )
-                user_stats[mode.name] = gmstats
+                user_stats[_id] = gmstats
 
             # fill potentially missing data
-            for game_mode in self._game_modes:
-                if not game_mode in user_stats.keys():
-                    mode = self.get_game_mode(name=game_mode)
-                    user_stats[mode.name] = self._get_default_gmstats(mode)
+            for gmid in self._gmids:
+                if not gmid in user_stats.keys():
+                    mode = self.get_game_mode(id=gmid)
+                    user_stats[gmid] = self._get_default_gmstats(mode)
 
             stats = core.UserStats(uid=uid, stats=user_stats)
 
@@ -280,4 +280,4 @@ class Firebase:
             db.reference(f"/stats/{uid}/{game_mode.id}").set(data)
 
             # update cache
-            self._cache_stats[uid].stats[game_mode.name] = stats
+            self._cache_stats[uid].stats[game_mode.id] = stats

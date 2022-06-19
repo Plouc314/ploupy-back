@@ -3,7 +3,7 @@ Represents responses of the rest API
 Each class matches an endpoint of the API
 """
 
-from src.models.core import core
+from models.core import core
 
 
 class UserData(core.Response):

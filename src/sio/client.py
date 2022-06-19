@@ -1,10 +1,10 @@
 from pydantic import BaseModel
 import aiohttp
 
-from src.models import core
-from src.models.api import args, responses
+from models import core
+from models.api import args, responses
 
-from src.core import FLAG_DEPLOY
+from core import FLAG_DEPLOY
 
 
 class Client:
@@ -21,20 +21,19 @@ class Client:
         self.session: aiohttp.ClientSession = None
         self._game_modes: dict[str, core.GameMode] = {}
 
-    async def get(self, endpoint: str, data: BaseModel | dict) -> dict | None:
+    async def get(self, endpoint: str, **kwargs) -> dict | None:
         """
         Send a GET requests to the api
         """
         if self.session is None:
             self.session = aiohttp.ClientSession()
 
-        url = f"{self.URL}{endpoint}"
-
-        if isinstance(data, BaseModel):
-            data = data.dict()
+        url = f"{self.URL}{endpoint}?"
+        # append formatted args
+        url += "&".join((f"{k}={v}" for k, v in kwargs.items() if v is not None))
 
         try:
-            async with self.session.get(url, json=data) as response:
+            async with self.session.get(url) as response:
                 if response.status != 200:
                     return None
                 data = await response.json()
@@ -75,7 +74,7 @@ class Client:
         """
         Return the value of the `user-data` endpoint
         """
-        response = await self.get("user-data", args.UserData(uid=uid))
+        response = await self.get("user-data", uid=uid)
         if response is None:
             return None
         return responses.UserData(**response)
@@ -90,7 +89,8 @@ class Client:
         if not all and id in self._game_modes.keys():
             return self._game_modes[id]
 
-        response = await self.get("game-mode", args.GameMode(id=id, all=all))
+        response = await self.get("game-mode", id=id, all=all)
+
         if response is None:
             return None
 

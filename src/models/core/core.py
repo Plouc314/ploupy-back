@@ -193,7 +193,8 @@ class UserStats(BaseModel):
     """
 
     uid: str
-    stats: list[GameModeStats]
+    stats: dict[str, GameModeStats]
     """
-    list of all the game mode's stats
+    all the game mode's stats
+    keys: game mode id
     """

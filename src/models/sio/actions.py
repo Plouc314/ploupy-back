@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from src.models.core import core
+from models.core import core
 
 class CreateQueue(BaseModel):
     gmid: str

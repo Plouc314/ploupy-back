@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
-from src.models.core import core
+from models import core as _c
 
-from src.game.game import Game
+from game.game import Game
 
 
 class User(BaseModel):
@@ -15,9 +15,18 @@ class User(BaseModel):
 
     sid: str
     """socketio id for user session"""
-    user: core.User
+    user: _c.User
     gid: str | None = None
     """game id"""
+
+
+class UserState(BaseModel):
+    """
+    Represents a user's current state
+    """
+
+    connected: bool
+    user: _c.User
 
 
 class Queue(BaseModel):
@@ -29,7 +38,22 @@ class Queue(BaseModel):
     """queue id"""
     active: bool
     users: list[User]
-    game_mode: core.GameMode
+    game_mode: _c.GameMode
+
+
+class QueueState(BaseModel):
+    """
+    Represents a queue's current state
+    """
+
+    qid: str
+    """id of the queue"""
+    active: bool
+    """if the queue is still active"""
+    gmid: str
+    """game mode id"""
+    users: list[_c.User]
+    """List of the users in the queue"""
 
 
 class Game(BaseModel):
@@ -42,7 +66,7 @@ class Game(BaseModel):
 
     gid: str
     """game id"""
-    mode: core.GameMode
+    mode: _c.GameMode
     """
     Game mode of the game
     """
@@ -60,18 +84,14 @@ class Game(BaseModel):
         arbitrary_types_allowed = True
 
 
-class QueueState(BaseModel):
+class GameState(BaseModel):
     """
-    Represents a queue's current state
-
-    As sent to the client (see responses.QueueStates)
+    Represents a game's current state
     """
 
-    qid: str
-    """id of the queue"""
-    active: bool
-    """if the queue is still active"""
+    gid: str
+    """game id"""
     gmid: str
     """game mode id"""
-    users: list[core.User]
-    """List of the users in the queue"""
+    users: list[_c.User]
+    """List of the users in the game"""

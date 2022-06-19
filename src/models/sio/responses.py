@@ -1,27 +1,46 @@
-from src.models.core import core
-from src.models.game import game
+from models import core as _c, game as _g
 
-from .sio import QueueState as _QueueState
+import models.sio.sio as _s
 
 
-class QueueStates(core.Response):
+class UserManagerState(_c.Response):
     """
-    Represents the states of some queues
+    Represents the state of the user manager
+
+    Contains currently connected users
     """
 
-    queues: list[_QueueState]
+    users: list[_s.UserState]
 
 
-class GameResults(core.Response):
+class QueueManagerState(_c.Response):
+    """
+    Represents the state of the queue manager
+    """
+
+    queues: list[_s.QueueState]
+
+
+class GameManagerState(_c.Response):
+    """
+    Represents the state of the game manager
+
+    Contains currently played games
+    """
+
+    games: list[_s.GameState]
+
+
+class GameResults(_c.Response):
     """
     Represents the results of a game
     Including the statistics of the game
     and the mmrs updates.
     """
 
-    ranking: list[core.User]
+    ranking: list[_c.User]
     """players: from best (idx: 0) to worst (idx: -1)"""
-    stats: list[game.GamePlayerStats]
+    stats: list[_g.GamePlayerStats]
     """
     in-game statistics of each player (same order as ranking)
     """

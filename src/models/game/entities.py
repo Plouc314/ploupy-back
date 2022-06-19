@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from pydantic import BaseModel
 
-from src.models.core import core
+from models.core import core
 
 
 class Tile(BaseModel):

@@ -1,2 +1,2 @@
-import src.models.api.args as args
-import src.models.api.responses as responses
+import models.api.args as args
+import models.api.responses as responses

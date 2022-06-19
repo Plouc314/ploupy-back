@@ -4,14 +4,14 @@ import uuid
 import numpy as np
 from typing import TYPE_CHECKING
 
-from src.models import core as _c, game as _g
-from src.core import ActionException
-from src.sio import JobManager
+from models import core as _c, game as _g
+from core import ActionException
+from sio import JobManager
 
-from src.game.entity.factory import Factory
-from src.game.entity.turret import Turret
-from src.game.entity.probe import Probe
-from src.game.entity.tile import Tile
+from game.entity.factory import Factory
+from game.entity.turret import Turret
+from game.entity.probe import Probe
+from game.entity.tile import Tile
 
 from .geometry import Geometry
 

@@ -1,57 +1,55 @@
 import uuid
 
-from src.models import core
-from src.models.sio import sio, responses
+from models import core as _c, sio as _s
 
-from .sio import sio as _sio
+from .manager import Manager
+from ..sio import sio
 
 
-class QueueManager:
+class QueueManager(Manager):
+    """
+    Manager of game queues
+    """
+
     def __init__(self):
-        self._queues: dict[str, sio.Queue] = {}
+        self._queues: dict[str, _s.Queue] = {}
 
-    def _get_queue_state(self, queue: sio.Queue) -> sio.QueueState:
+    def _get_queue_state(self, queue: _s.Queue) -> _s.QueueState:
         """
-        Return sio queue casted to queue state
+        Return sio.Queue casted to QueueState
         """
-        return sio.QueueState(
+        return _s.QueueState(
             qid=queue.qid,
             active=queue.active,
             gmid=queue.game_mode.id,
             users=[user.user for user in queue.users],
         )
 
-    def get_queues_response(self, queues: list[sio.Queue]) -> responses.QueueStates:
+    def get_response(self, queues: list[_s.Queue]) -> _s.responses.QueueManagerState:
         """
         Return a queue state response composed of the given queues
         """
-        return responses.QueueStates(
+        return _s.responses.QueueManagerState(
             queues=[self._get_queue_state(queue) for queue in queues]
         )
 
-    def get_queue(self, qid: str) -> sio.Queue | None:
+    def get_queue(self, qid: str) -> _s.Queue | None:
         """
         Get a queue by qid,
         return None if not found
         """
         return self._queues.get(qid, None)
 
-    def add_queue(self, game_mode: core.GameMode) -> sio.Queue:
+    def add_queue(self, game_mode: _c.GameMode) -> _s.Queue:
         """
-        Build an add a new sio.Queue instance
+        Build an add a new _s.Queue instance
         """
         qid = uuid.uuid4().hex
-        queue_state = sio.Queue(qid=qid, active=True, users=[], game_mode=game_mode)
+        queue_state = _s.Queue(qid=qid, active=True, users=[], game_mode=game_mode)
         self._queues[qid] = queue_state
         return queue_state
 
-    def get_queues_state(self) -> responses.QueueStates:
-        """
-        Return the state of all queues
-        """
-        return self.get_queues_response(self._queues.values())
-
-    def leave_queue(self, queue: sio.Queue, user: sio.User):
+    def leave_queue(self, queue: _s.Queue, user: _s.User):
         """
         Remove the user from the queue,
         if no one left in queue, remove it from state queues
@@ -66,11 +64,15 @@ class QueueManager:
         if len(queue.users) == 0:
             self._queues.pop(queue.qid, None)
 
-    async def leave_all_queues(self, user: sio.User):
+    async def connect(self):
         """
-        Remove user from all queues where he's presents
+        Pass
+        """
 
-        NOTE: Broadcast all queue changes to clients
+    async def disconnect(self, user: _s.User):
+        """
+        - Remove user from all queues where he's presents
+        - Broadcast all queue changes to clients
         """
         to_update_qs = {}
 
@@ -84,9 +86,9 @@ class QueueManager:
             self.leave_queue(queue, user)
             queues.append(queue)
 
-        await _sio.emit("queue_state", self.get_queues_response(queues).dict())
+        await sio.emit("queue_state", self.get_response(queues).dict())
 
-    async def join_queue(self, queue: sio.Queue, user: sio.User) -> bool:
+    async def join_queue(self, queue: _s.Queue, user: _s.User) -> bool:
         """
         Add the user to the queue.
         In case the queue is full:
@@ -102,15 +104,15 @@ class QueueManager:
         queue.users.append(user)
 
         if len(queue.users) < queue.game_mode.config.n_player:
-            await _sio.emit("queue_state", self.get_queues_response([queue]).dict())
+            await sio.emit("queue_state", self.get_response([queue]).dict())
             return False
 
         # queue is full
         self._queues.pop(queue.qid, None)
         queue.active = False
 
-        updated_qs: list[sio.Queue] = [queue]
-        to_rem_qs: list[sio.Queue] = []
+        updated_qs: list[_s.Queue] = [queue]
+        to_rem_qs: list[_s.Queue] = []
 
         # leave other queues
         for q in self._queues.values():
@@ -130,6 +132,10 @@ class QueueManager:
             self._queues.pop(q.qid, None)
 
         # broadcast updated queues
-        await _sio.emit("queue_state", self.get_queues_response(updated_qs).dict())
+        await sio.emit("queue_state", self.get_response(updated_qs).dict())
 
         return True
+
+    @property
+    def state(self) -> _s.responses.QueueManagerState:
+        return self.get_response(self._queues.values())

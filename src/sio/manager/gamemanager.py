@@ -1,17 +1,30 @@
 import uuid
 
-from src.models import core, game as _g, sio as _s, api as _a
+from models import core, game as _g, sio as _s, api as _a
 
-from src.game import Game
+from game import Game
 
-from .client import client
-from .sio import sio
-from .job import JobManager
+from .manager import Manager
+from ..client import client
+from ..sio import sio
+from ..job import JobManager
 
 
-class GameManager:
+class GameManager(Manager):
+    """
+    Manager of active games
+    """
+
     def __init__(self):
         self._games: dict[str, _s.Game] = {}
+
+    def _get_game_state(self, game: _s.Game) -> _s.GameState:
+        """
+        Return the sio.Game casted to GameState
+        """
+        return _s.GameState(
+            gid=game.gid, gmid=game.mode.id, users=[user.user for user in game.users]
+        )
 
     def get_game(
         self, gid: str | None = None, user: core.User | None = None
@@ -40,6 +53,11 @@ class GameManager:
         game_state = _s.Game(gid=gid, mode=mode, game=game, users=users)
         self._games[gid] = game_state
         return game_state
+
+    async def connect(self):
+        """
+        Pass
+        """
 
     def link_user_to_game(self, gs: _s.Game, user: _s.User):
         """
@@ -91,18 +109,19 @@ class GameManager:
         if gs is None:
             return
 
-        if aborted:
-            mmrs = [0 for _ in results.ranking]
-            mmr_diffs = [0 for _ in results.ranking]
-        else:
+        mmrs = [0 for _ in results.ranking]
+        mmr_diffs = [0 for _ in results.ranking]
+
+        if not aborted:
             # notify api of game results
             response = await client.post_game_result(
                 _a.args.GameResults(
                     gmid=gs.mode.id, ranking=[user.uid for user in results.ranking]
                 )
             )
-            mmrs = response.mmrs
-            mmr_diffs = response.mmr_diffs
+            if response is not None:
+                mmrs = response.mmrs
+                mmr_diffs = response.mmr_diffs
 
         # build sio response (merge game/api data)
         response = _s.responses.GameResults(
@@ -123,9 +142,9 @@ class GameManager:
             user.gid = None
             sio.leave_room(user.sid, room=gid)
 
-    def disconnect(self, user: _s.User):
+    async def disconnect(self, user: _s.User):
         """
-        Disconnect the (socket-io) user from the game
+        Disconnect the sio.User from the game
         NOTE: do NOT RESIGN the game for the user
 
         In case nobody is connected to the game anymore,
@@ -143,3 +162,9 @@ class GameManager:
 
         if len(game.users) == 0:
             game.game.end_game(aborted=True)
+
+    @property
+    def state(self) -> _s.responses.GameManagerState:
+        return _s.responses.GameManagerState(
+            games=[self._get_game_state(game) for game in self._games.values()]
+        )

@@ -2,9 +2,9 @@ from functools import partial
 from typing import Callable
 import numpy as np
 
-from src.models import core as _c, game as _g
-from src.core import Recorder, ActionException
-from src.sio import JobManager
+from models import core as _c, game as _g
+from core import Recorder, ActionException
+from sio import JobManager
 
 from .map import Map
 from .player import Player

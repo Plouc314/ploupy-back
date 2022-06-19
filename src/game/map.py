@@ -1,8 +1,8 @@
 import numpy as np
 
-from src.models import core as _c, game as _g
+from models import core as _c, game as _g
 
-from src.game.entity.tile import Tile
+from game.entity.tile import Tile
 
 from .geometry import Geometry
 

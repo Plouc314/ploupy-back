@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
-from src.models.core import core
-import src.models.game.entities as entities
+from models.core import core
+import models.game.entities as entities
 
 
 

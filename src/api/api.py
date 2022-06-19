@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.models import core
-from src.models.api import args, responses
-from src.core import FirebaseException, ALLOWED_ORIGINS
+from models import core
+from models.api import args, responses
+from core import FirebaseException, ALLOWED_ORIGINS
 
-import src.api.mmrsystem as mmrsystem
+import api.mmrsystem as mmrsystem
 from .firebase import Firebase
 
 
@@ -29,13 +29,15 @@ def ping():
 
 
 @app.get("/api/user-data")
-def user_data(data: args.UserData) -> responses.UserData:
+def user_data(
+    uid: str | None = None, username: str | None = None
+) -> responses.UserData:
     """
     Return the user data corresponding to the given uid
     """
-    print(f"{data.uid=} {data.username=}")
+    print(f"{uid=} {username=}")
 
-    user = firebase.get_user(uid=data.uid, username=data.username)
+    user = firebase.get_user(uid=uid, username=username)
     if user is None:
         return core.Response(success=False, msg="User not found.")
 
@@ -60,17 +62,16 @@ def create_user(data: args.CreateUser) -> responses.CreateUser:
 
 
 @app.get("/api/game-mode")
-def game_mode(data: args.GameMode) -> responses.GameMode:
+def game_mode(id: str | None = None, all: bool | None = None) -> responses.GameMode:
     """
     Return the game mode with the given id or name
 
     If all = True, return all the game modes
     """
-
-    if data.all:
+    if all:
         return responses.GameMode(game_modes=firebase.get_game_modes())
 
-    mode = firebase.get_game_mode(id=data.id)
+    mode = firebase.get_game_mode(id=id)
 
     if mode is None:
         return core.Response(success=False, msg="Mode not found.")
@@ -103,20 +104,20 @@ def game_results(data: args.GameResults) -> responses.GameResults:
 
         # update mode stats
         stats = firebase.get_user_stats(user.uid)
-        genstats = stats.stats[mode.name]
-        genstats.scores[i] += 1
+        gmstats = stats.stats[mode.id]
+        gmstats.scores[i] += 1
 
-        diff = mmrsystem.get_mmr_diff(genstats, mode, i)
-        genstats.mmr += diff
+        diff = mmrsystem.get_mmr_diff(gmstats, mode, i)
+        gmstats.mmr += diff
 
-        mmrs.append(genstats.mmr)
+        mmrs.append(gmstats.mmr)
         mmr_diffs.append(diff)
 
         try:
             firebase.update_user_stats(
                 uid=uid,
                 gmid=mode.id,
-                stats=genstats,
+                stats=gmstats,
             )
         except FirebaseException as e:
             continue
@@ -128,18 +129,18 @@ def game_results(data: args.GameResults) -> responses.GameResults:
 
 
 @app.get("/api/user-stats")
-def user_stats(data: args.UserStats) -> responses.UserStats:
-    '''
+def user_stats(uid: str) -> responses.UserStats:
+    """
     Return the user stats
-    '''
+    """
     # get user from db -> assert it exists
-    user = firebase.get_user(uid=data.uid)
+    user = firebase.get_user(uid=uid)
 
     if user is None:
-        return core.Response(success=False, msg=f"Invalid user id '{data.uid}'")
+        return core.Response(success=False, msg=f"Invalid user id '{uid}'")
 
     # get stats
-    stats = firebase.get_user_stats(data.uid)
+    stats = firebase.get_user_stats(uid)
 
     return responses.UserStats(
         stats=list(stats.stats.values()),
