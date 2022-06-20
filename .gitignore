@@ -2,3 +2,5 @@
 **/__pycache__
 **/foo.py
 logs
+.env
+*.json

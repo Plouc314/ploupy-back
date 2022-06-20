@@ -1,51 +1,63 @@
+import numpy as np
 from pydantic import BaseModel
-
-from src.core import PointModel, UserModel
-
-from src.game.entity.models import (
-    TileModel,
-    TileStateModel,
-    FactoryModel,
-    FactoryStateModel,
-    ProbeModel,
-    ProbeStateModel,
-    TurretModel,
-    TurretStateModel,
-)
+from typing import Literal
 
 
-class MapModel(BaseModel):
-    tiles: list[TileModel]
+GameModes = Literal["base-2", "base-3", "base-4"]
+"""
+List of all game modes
+"""
 
 
-class MapStateModel(BaseModel):
-    tiles: list[TileStateModel] = []
+Coord = list | tuple | np.ndarray
+Pos = list | tuple | np.ndarray
 
 
-class PlayerModel(BaseModel):
-    username: str
-    money: int
-    score: int
-    alive: bool
-    income: int
-    factories: list[FactoryModel]
-    turrets: list[TurretStateModel]
-    probes: list[ProbeModel]
+class Point(BaseModel):
+    """
+    Represent a point in 2D
+    """
+
+    x: float
+    y: float
+
+    @classmethod
+    def from_list(cls, point: Pos) -> "Point":
+        """
+        Build an instance of Point from a list
+        """
+        return Point(x=point[0], y=point[1])
+
+    @property
+    def coord(self) -> np.ndarray:
+        """
+        Return the point as coordinate (int dtype)
+        """
+        return np.array([self.x, self.y], dtype=int)
+
+    @property
+    def pos(self) -> np.ndarray:
+        """
+        Return the point as position (float dtype)
+        """
+        return np.array([self.x, self.y], dtype=float)
 
 
-class PlayerStateModel(BaseModel):
-    username: str
-    money: int | None = None
-    score: int | None = None
-    alive: bool | None = None
-    income: int | None = None
-    factories: list[FactoryStateModel] = []
-    turrets: list[TurretStateModel] = []
-    probes: list[ProbeStateModel] = []
+class Response(BaseModel):
+    """
+    Represent a response from a server (api/sio)
+    """
+
+    success: bool = True
+    msg: str = ""
 
 
 class GameConfig(BaseModel):
-    dim: PointModel
+    """
+    Global configuration of the game
+    """
+
+    dim: Point
     """
     dimension of the map (unit: coord)
     """
@@ -130,41 +142,59 @@ class GameConfig(BaseModel):
     """
 
 
-class GameModel(BaseModel):
+class User(BaseModel):
+    """
+    Represent a user general informations
+    """
+
+    uid: str
+    username: str
+    email: str
+    avatar: str
+    """
+    Name of the avatar
+    (see ploupy-front `textures.tsx` for possible values)
+    """
+
+
+class GameMode(BaseModel):
+    """
+    Represent a game mode
+    """
+
+    id: str
+    name: str
     config: GameConfig
-    map: MapModel
-    players: list[PlayerModel]
 
 
-class GameStateModel(BaseModel):
-    map: MapStateModel | None = None
-    players: list[PlayerStateModel] = []
+class DBConfig(BaseModel):
+    """
+    Represent the config node of the db
+    """
+
+    modes: list[GameMode]
 
 
-class GameResultResponse(BaseModel):
-    ranking: list[UserModel]
-    '''players: from best to worst'''
+class GameModeStats(BaseModel):
+    """
+    Represent the statistics and ranking of a user
+    in a specific mode
+    """
+
+    mode: GameMode
+    mmr: int
+    scores: list[int]
 
 
-class BuildFactoryResponse(BaseModel):
-    username: str
-    money: int
-    factory: FactoryModel
+class UserStats(BaseModel):
+    """
+    Represent the statistics and ranking of a user
+    in all the modes
+    """
 
-
-class BuildTurretResponse(BaseModel):
-    username: str
-    money: int
-    turret: TurretModel
-
-
-class BuildProbeResponse(BaseModel):
-    username: str
-    money: int
-    probe: ProbeModel
-
-
-class TurretFireProbeResponse(BaseModel):
-    username: str
-    turret_id: str
-    probe: ProbeStateModel
+    uid: str
+    stats: dict[str, GameModeStats]
+    """
+    all the game mode's stats
+    keys: game mode id
+    """

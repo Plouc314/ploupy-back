@@ -1,33 +1,22 @@
+from functools import partial
 from typing import Callable
 import numpy as np
 
-
-from src.core import UserModel, PointModel, Coord
-from src.sio import JobManager
-from src.game.entity.models import FactoryModel, ProbePolicy, ProbeStateModel
+from models import core as _c, game as _g
+from core import Recorder, ActionException
+from sio import JobManager
 
 from .map import Map
 from .player import Player
-from .exceptions import ActionException
-from .models import (
-    BuildFactoryResponse,
-    BuildTurretResponse,
-    GameModel,
-    GameConfig,
-    GameResultResponse,
-    GameStateModel,
-    MapStateModel,
-    PlayerStateModel,
-)
 
 
 class Game:
     def __init__(
         self,
-        users: list[UserModel],
+        users: list[_c.User],
         job_manager: JobManager,
-        config: GameConfig,
-        on_end_game: Callable[["Game"], None],
+        config: _c.GameConfig,
+        on_end_game: Callable[[_g.GameResult, bool], None],
     ):
         self.users = {u.username: u for u in users}
         self.job_manager = job_manager
@@ -35,11 +24,13 @@ class Game:
         self.map = Map(config)
         self.players: dict[str, Player] = {}
 
+        self.recorder = Recorder(time_unit=1)
+
         # if the game is finished
         self.ended = False
 
         # function called when the game ends
-        self._on_end_game = on_end_game
+        self.on_end_game = on_end_game
 
         self._dead_players: list[Player] = []
 
@@ -64,7 +55,7 @@ class Game:
 
         return self.players
 
-    def _get_start_positions(self, n: int) -> list[Coord]:
+    def _get_start_positions(self, n: int) -> list[_c.Coord]:
         """
         Return suitable start positions for n players
         """
@@ -78,7 +69,7 @@ class Game:
             positions.append(pos.astype(int))
         return positions
 
-    def _build_initial_territory(self, player: Player, origin: Coord):
+    def _build_initial_territory(self, player: Player, origin: _c.Coord):
         """ """
         tile = self.map.get_tile(origin[0], origin[1])
         if tile is None:
@@ -89,7 +80,7 @@ class Game:
 
         # build an initial factory
         player.money += self.config.factory_price
-        self.action_build_factory(player, PointModel.from_list(origin))
+        self.action_build_factory(player, _c.Point.from_list(origin))
 
         # build initial probes
         factory = player.factories[0]
@@ -97,14 +88,14 @@ class Game:
         for i in range(self.config.initial_n_probes):
             factory.build_probe(self.map, self.job_manager)
 
-    def end_game(self, notify_client: bool = True, delay: float = 0.5):
+    def end_game(self, aborted: bool = False, delay: float = 0.5):
         """
         End the game (Will only be done once)
 
-        Call `_on_end_game`
-
-        If `notify_client` is true, notify client of the game result
-        (wait for `delay` before sending the response)
+        - Kill all remaining players
+        - Build GameResults
+        - Wait for delay (in separate job)
+        - Call `on_end_game` (in separate job)
         """
         if self.ended:
             return
@@ -115,21 +106,29 @@ class Game:
         for player in self.players.values():
             if player.alive:
                 # kill remaining players
-                player.die(notify_client=notify_client, is_winner=True)
+                player.die(notify_client=True, is_winner=True)
                 winners.append(player)
 
+        # ranking
         ranking = winners + self._dead_players[::-1]
 
-        if notify_client:
-            self.job_manager.send(
-                "game_result",
-                GameResultResponse(ranking=[player.user for player in ranking]),
-                delay=delay,
-                on_send=lambda: self._on_end_game(self),
-            )
-        else:
-            # still call on-end-game callback
-            self._on_end_game(self)
+        # stats
+        data = self.recorder.compile()
+        stats: list[_g.GamePlayerStats] = []
+        for username, raw in data.items():
+            stats.append(_g.GamePlayerStats(username=username, **raw))
+
+        game_results = _g.GameResult(
+            ranking=[player.user for player in ranking], stats=stats
+        )
+
+        # call on_end_game after a delay
+        # on_end_game is responsible to notify client
+        # and overall clean up of game in sio server
+        self.job_manager.execute(
+            partial(self.on_end_game, game_results, aborted),
+            delay=delay,
+        )
 
     def get_player(self, username: str) -> Player | None:
         """
@@ -159,8 +158,8 @@ class Game:
         player.die()
 
     def action_build_factory(
-        self, player: Player, coord: PointModel
-    ) -> BuildFactoryResponse:
+        self, player: Player, coord: _c.Point
+    ) -> _g.BuildFactoryResponse:
         """
         Build a factory at the given coord for the given player is possible
 
@@ -186,13 +185,13 @@ class Game:
         job_probe = self.job_manager.make_job("build_probe", factory.job_probe)
         job_probe.start(self.map)
 
-        return BuildFactoryResponse(
+        return _g.BuildFactoryResponse(
             username=player.username, money=player.money, factory=factory.model
         )
 
     def action_build_turret(
-        self, player: Player, coord: PointModel
-    ) -> BuildTurretResponse:
+        self, player: Player, coord: _c.Point
+    ) -> _g.BuildTurretResponse:
         """
         Build a turret at the given coord for the given player is possible
 
@@ -215,13 +214,13 @@ class Game:
         job_fire = self.job_manager.make_job("turret_fire_probe", turret.job_fire)
         job_fire.start()
 
-        return BuildTurretResponse(
+        return _g.BuildTurretResponse(
             username=player.username, money=player.money, turret=turret.model
         )
 
     def action_move_probes(
-        self, player: Player, ids: list[str], targets: list[PointModel]
-    ) -> GameStateModel:
+        self, player: Player, ids: list[str], target: _c.Point
+    ) -> _g.GameState:
         """
         Change the target of the probes with the given `ids`
 
@@ -230,25 +229,20 @@ class Game:
         if not player.alive:
             raise ActionException("You are dead ?!")
 
-        if len(ids) != len(targets):
-            raise ActionException(
-                f"There should be the same number of ids and targets ({len(ids)} != {len(targets)})."
-            )
+        # assert that the target is valid
+        tile = self.map.get_tile(*target.coord)
+        if tile is None:
+            raise ActionException(f"Move target is invalid '{target.coord}'")
+
+        # can't move on opponent tile
+        if not tile.owner in (None, player):
+            raise ActionException(f"Move target is invalid '{target.coord}'")
 
         states = []
 
-        for id, target in zip(ids, targets):
+        for id in ids:
             probe = player.get_probe(id)
             if probe is None:
-                continue
-
-            # assert that the target is valid
-            tile = self.map.get_tile(*target.coord)
-            if tile is None:
-                continue
-
-            # can't move on opponent tile
-            if not tile.owner in (None, player):
                 continue
 
             # stop current movement job
@@ -263,14 +257,11 @@ class Game:
 
             states.append(probe.get_state())
 
-        if len(states) == 0 and len(targets) > 0:
-            raise ActionException("Invalid targets.")
-
-        return GameStateModel(
-            players=[PlayerStateModel(username=player.username, probes=states)]
+        return _g.GameState(
+            players=[_g.PlayerState(username=player.username, probes=states)]
         )
 
-    def action_explode_probes(self, player: Player, ids: list[str]) -> GameStateModel:
+    def action_explode_probes(self, player: Player, ids: list[str]) -> _g.GameState:
         """
         Explode the probes with the given `ids`
         """
@@ -286,14 +277,14 @@ class Game:
                 continue
 
             tiles += probe.explode(self.map)
-            probes.append(ProbeStateModel(id=probe.id, alive=probe.alive))
+            probes.append(_g.ProbeState(id=probe.id, alive=probe.alive))
 
-        return GameStateModel(
-            map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
-            players=[PlayerStateModel(username=player.username, probes=probes)],
+        return _g.GameState(
+            map=_g.MapState(tiles=[tile.get_state() for tile in tiles]),
+            players=[_g.PlayerState(username=player.username, probes=probes)],
         )
 
-    def action_probes_attack(self, player: Player, ids: list[str]) -> GameStateModel:
+    def action_probes_attack(self, player: Player, ids: list[str]) -> _g.GameState:
         """
         Make the probes with the given `ids` attack the opponents
         """
@@ -314,7 +305,7 @@ class Game:
             probe.stop()
 
             # set probe policy to attack
-            probe.set_policy(ProbePolicy.ATTACK)
+            probe.set_policy(_g.ProbePolicy.ATTACK)
 
             # set new target
             probe.set_target(target)
@@ -325,16 +316,16 @@ class Game:
 
             states.append(probe.get_state())
 
-        return GameStateModel(
-            players=[PlayerStateModel(username=player.username, probes=states)]
+        return _g.GameState(
+            players=[_g.PlayerState(username=player.username, probes=states)]
         )
 
     @property
-    def model(self) -> GameModel:
+    def model(self) -> _g.Game:
         """
         Return the model (pydantic) representation of the instance
         """
-        return GameModel(
+        return _g.Game(
             config=self.config,
             map=self.map.model,
             players=[player.model for player in self.players.values()],

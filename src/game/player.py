@@ -4,23 +4,15 @@ import uuid
 import numpy as np
 from typing import TYPE_CHECKING
 
-from src.core import UserModel, PointModel, Coord
-from src.sio import JobManager
+from models import core as _c, game as _g
+from core import ActionException
+from sio import JobManager
 
-from src.game.entity.models import FactoryStateModel, TurretStateModel, ProbeStateModel
-from src.game.entity.factory import Factory
-from src.game.entity.turret import Turret
-from src.game.entity.probe import Probe
-from src.game.entity.tile import Tile
+from game.entity.factory import Factory
+from game.entity.turret import Turret
+from game.entity.probe import Probe
+from game.entity.tile import Tile
 
-from .exceptions import ActionException
-from .models import (
-    GameStateModel,
-    MapStateModel,
-    PlayerModel,
-    PlayerStateModel,
-    TileStateModel,
-)
 from .geometry import Geometry
 
 if TYPE_CHECKING:
@@ -28,12 +20,14 @@ if TYPE_CHECKING:
 
 
 class Player:
-    def __init__(self, user: UserModel, game: Game):
+    def __init__(self, user: _c.User, game: Game):
         self.user = user
         self.game = game
         self.map = game.map
         self.job_manager = game.job_manager
         self.config = game.config
+        self.recorder = game.recorder.dispatch(user.username)
+
         self.money = self.config.initial_money
         self.score = 0
         self.alive = True
@@ -98,21 +92,21 @@ class Player:
         if notify_client:
             self.job_manager.send(
                 "game_state",
-                GameStateModel(
+                _g.GameState(
                     players=[
-                        PlayerStateModel(
+                        _g.PlayerState(
                             username=self.user.username,
                             alive=is_winner,
                             factories=[
-                                FactoryStateModel(id=factory.id, alive=False)
+                                _g.FactoryState(id=factory.id, alive=False)
                                 for factory in factories
                             ],
                             turrets=[
-                                TurretStateModel(id=turret.id, alive=False)
+                                _g.TurretState(id=turret.id, alive=False)
                                 for turret in turrets
                             ],
                             probes=[
-                                ProbeStateModel(id=probe.id, alive=False)
+                                _g.ProbeState(id=probe.id, alive=False)
                                 for probe in probes
                             ],
                         )
@@ -126,7 +120,7 @@ class Player:
         """
         return len(self.factories) == 0
 
-    def build_factory(self, coord: PointModel) -> Factory:
+    def build_factory(self, coord: _c.Point) -> Factory:
         """
         Build a factory at the given coord is possible
 
@@ -143,7 +137,7 @@ class Player:
         self.factories.append(factory)
         return factory
 
-    def build_turret(self, coord: PointModel) -> Turret:
+    def build_turret(self, coord: _c.Point) -> Turret:
         """
         Build a turret at the given coord is possible
 
@@ -160,7 +154,7 @@ class Player:
         self.turrets.append(turret)
         return turret
 
-    def build_probe(self, pos: PointModel) -> Probe | None:
+    def build_probe(self, pos: _c.Point) -> Probe | None:
         """
         Build a probe at the given position (no check on position)
         if enough money, else return None
@@ -202,7 +196,7 @@ class Player:
                 return probe
         return None
 
-    def _get_probe_farm_target(self, coord: Coord) -> Coord | None:
+    def _get_probe_farm_target(self, coord: _c.Coord) -> _c.Coord | None:
         """
         Return a possible target to farm (own or unoccupied tile)
         in the surroundings of `coord` or None
@@ -237,7 +231,7 @@ class Player:
 
         return None
 
-    def get_probe_farm_target(self, probe: Probe) -> Coord:
+    def get_probe_farm_target(self, probe: Probe) -> _c.Coord:
         """
         Return a possible target for the probe to farm (own or unoccupied tile)
         """
@@ -261,7 +255,7 @@ class Player:
         # if nothing works: return the probe's coord -> wait
         return probe.coord
 
-    def get_probe_attack_target(self, probe: Probe) -> Coord:
+    def get_probe_attack_target(self, probe: Probe) -> _c.Coord:
         """
         Return a possible target for the probe to attack
         """
@@ -306,7 +300,7 @@ class Player:
         """
         return tile.get_income()
 
-    def _deprecate_tile(self, tile: Tile) -> TileStateModel | None:
+    def _deprecate_tile(self, tile: Tile) -> _g.TileState | None:
         """
         If the `tile` meets the conditions,
         decrease its occupation with a certain probability.
@@ -327,14 +321,22 @@ class Player:
     def get_income(self) -> float:
         """
         Compute the income of the player
+
+        Records player metrics (call `_records()`)
         """
         income = self.config.base_income
         for factory in self.factories:
             income += self._get_factory_income(factory)
         for turret in self.turrets:
             income += self._get_turret_income(turret)
+
+        tot_occ = 0
         for tile in self.tiles:
             income += self._get_tile_income(tile)
+            tot_occ += tile.occupation
+
+        self._record(tot_occ)
+
         return income
 
     def _get_income_prediction(self, income: float) -> float:
@@ -348,6 +350,20 @@ class Player:
                     self.config.probe_price / self.config.factory_build_probe_delay
                 )
         return prediction
+
+    def _record(self, occupation: int):
+        """
+        Record player metrics
+
+        Given the total occupation of the player
+        """
+        self.recorder.record(
+            money=int(self.money),
+            occupation=occupation,
+            factories=len(self.factories),
+            turrets=len(self.turrets),
+            probes=len(self.probes),
+        )
 
     async def job_income(self):
         """
@@ -378,21 +394,21 @@ class Player:
                 if state is not None:
                     tiles.append(state)
 
-            yield GameStateModel(
-                map=MapStateModel(tiles=tiles),
+            yield _g.GameState(
+                map=_g.MapState(tiles=tiles),
                 players=[
-                    PlayerStateModel(
+                    _g.PlayerState(
                         username=self.user.username, money=self.money, income=prediction
                     )
                 ],
             )
 
     @property
-    def model(self) -> PlayerModel:
+    def model(self) -> _g.Player:
         """
         Return the model (pydantic) representation of the instance
         """
-        return PlayerModel(
+        return _g.Player(
             username=self.user.username,
             money=self.money,
             score=self.score,

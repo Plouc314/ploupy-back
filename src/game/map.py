@@ -1,13 +1,14 @@
 import numpy as np
 
-from src.game.entity.tile import Tile
+from models import core as _c, game as _g
 
-from .models import MapModel, GameConfig
+from game.entity.tile import Tile
+
 from .geometry import Geometry
 
 
 class Map:
-    def __init__(self, config: GameConfig):
+    def __init__(self, config: _c.GameConfig):
         self.config = config
         self.dim = np.array(config.dim.coord, dtype=int)
         self._tiles_2d: list[list[Tile]] = None
@@ -59,11 +60,11 @@ class Map:
         return neighbours
 
     @property
-    def model(self) -> MapModel:
+    def model(self) -> _g.Map:
         """
         Return the model (pydantic) representation of the instance
         """
         tiles: list[Tile] = []
         for col in self._tiles_2d:
             tiles.extend(col)
-        return MapModel(tiles=[tile.model for tile in tiles])
+        return _g.Map(tiles=[tile.model for tile in tiles])

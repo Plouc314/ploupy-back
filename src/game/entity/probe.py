@@ -4,36 +4,28 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
-from src.core import PointModel, Pos, Coord
-from src.sio import JobManager
-
-from src.game.models import (
-    GameStateModel,
-    PlayerStateModel,
-    MapStateModel,
-    TileStateModel,
-)
+from models import core as _c, game as _g
+from sio import JobManager
 
 from .entity import Entity
-from .models import ProbeModel, ProbeStateModel, ProbePolicy
 
 if TYPE_CHECKING:
-    from src.game import Player, Map
+    from game import Player, Map
     from .factory import Factory
     from .tile import Tile
 
 
 class Probe(Entity):
-    def __init__(self, player: "Player", pos: Pos):
+    def __init__(self, player: "Player", pos: _c.Pos):
         super().__init__(pos)
         self.player = player
         self.config = player.config
 
         # the probe target
-        self.target: Coord = self.coord
+        self.target: _c.Coord = self.coord
 
         self.alive = True
-        self.policy = ProbePolicy.FARM
+        self.policy = _g.ProbePolicy.FARM
 
         # the factory that created the probe
         self.factory: Factory | None = None
@@ -65,7 +57,7 @@ class Probe(Entity):
 
         If the "move" job is active, update the probe's position
         """
-        self.policy = ProbePolicy.FARM
+        self.policy = _g.ProbePolicy.FARM
 
         if len(self._active_jobs["move"]) > 0:
             self.pos = self.get_current_pos()
@@ -97,24 +89,24 @@ class Probe(Entity):
         if notify_client:
             self.player.job_manager.send(
                 "game_state",
-                GameStateModel(
+                _g.GameState(
                     players=[
-                        PlayerStateModel(
+                        _g.PlayerState(
                             username=self.player.username,
-                            probes=[ProbeStateModel(id=self.id, alive=False)],
+                            probes=[_g.ProbeState(id=self.id, alive=False)],
                         )
                     ],
                 ),
             )
 
-    def set_policy(self, policy: ProbePolicy):
+    def set_policy(self, policy: _g.ProbePolicy):
         """
         Set the probe policy
         No side effect (for now)
         """
         self.policy = policy
 
-    def set_target(self, target: Coord):
+    def set_target(self, target: _c.Coord):
         """
         Set the probe's target coordinate,
         will reset the probe's departure time
@@ -133,19 +125,19 @@ class Probe(Entity):
         self._travel_duration = self._travel_distance / self.config.probe_speed
         self._travel_vector = (self.target - self.pos) / self._travel_distance
 
-    def get_next_target(self) -> Coord:
+    def get_next_target(self) -> _c.Coord:
         """
         Get the next target to go to,
         depending on the current probe policy
         """
-        if self.policy == ProbePolicy.FARM:
+        if self.policy == _g.ProbePolicy.FARM:
             return self.player.get_probe_farm_target(self)
-        elif self.policy == ProbePolicy.ATTACK:
+        elif self.policy == _g.ProbePolicy.ATTACK:
             return self.player.get_probe_attack_target(self)
         else:
             raise NotImplementedError()
 
-    def get_current_pos(self) -> Pos:
+    def get_current_pos(self) -> _c.Pos:
         """
         Return the actual position of the probe
         (somewhere between `pos` and `target`)
@@ -181,7 +173,7 @@ class Probe(Entity):
 
         return reached_tiles
 
-    def _behave_farm(self, tile: Tile, map: Map) -> GameStateModel | None:
+    def _behave_farm(self, tile: Tile, map: Map) -> _g.GameState | None:
         """
         Actions of the probe when arriving on a tile on farm policy
         """
@@ -196,19 +188,19 @@ class Probe(Entity):
 
         tile.claim(self.player)
 
-        return GameStateModel(
-            map=MapStateModel(tiles=[tile.get_state()]),
+        return _g.GameState(
+            map=_g.MapState(tiles=[tile.get_state()]),
             players=[
-                PlayerStateModel(
+                _g.PlayerState(
                     username=self.player.username,
                     probes=[
-                        ProbeStateModel(id=self.id, pos=PointModel.from_list(self.pos))
+                        _g.ProbeState(id=self.id, pos=_c.Point.from_list(self.pos))
                     ],
                 )
             ],
         )
 
-    def _behave_attack(self, tile: Tile, map: Map) -> GameStateModel | None:
+    def _behave_attack(self, tile: Tile, map: Map) -> _g.GameState | None:
         """
         Actions of the probe when arriving on a tile on attack policy
         """
@@ -217,26 +209,26 @@ class Probe(Entity):
 
         tiles = self.explode(map)
 
-        return GameStateModel(
-            map=MapStateModel(tiles=[tile.get_state() for tile in tiles]),
+        return _g.GameState(
+            map=_g.MapState(tiles=[tile.get_state() for tile in tiles]),
             players=[
-                PlayerStateModel(
+                _g.PlayerState(
                     username=self.player.username,
-                    probes=[ProbeStateModel(id=self.id, alive=self.alive)],
+                    probes=[_g.ProbeState(id=self.id, alive=self.alive)],
                 )
             ],
         )
 
-    def behave(self, map: Map) -> GameStateModel | None:
+    def behave(self, map: Map) -> _g.GameState | None:
         """
         Execute what the probe has to do when its arrive on a tile
         depending on the current policy
         """
         tile = map.get_tile(*self.coord)
 
-        if self.policy == ProbePolicy.FARM:
+        if self.policy == _g.ProbePolicy.FARM:
             return self._behave_farm(tile, map)
-        elif self.policy == ProbePolicy.ATTACK:
+        elif self.policy == _g.ProbePolicy.ATTACK:
             return self._behave_attack(tile, map)
         else:
             raise NotImplementedError()
@@ -273,7 +265,7 @@ class Probe(Entity):
             if response is not None:
                 yield response
 
-            if self.policy == ProbePolicy.FARM:
+            if self.policy == _g.ProbePolicy.FARM:
                 await JobManager.sleep(self.config.probe_claim_delay)
 
                 # in case response -> the tile was claimed in this job
@@ -291,39 +283,39 @@ class Probe(Entity):
             self.set_target(target)
 
             # assert that the probe can attack a tile if in attack policy
-            if self.policy == ProbePolicy.ATTACK:
+            if self.policy == _g.ProbePolicy.ATTACK:
                 # if no tile to attack -> fall back to farm policy
                 if np.all(self.coord == target):
-                    self.policy = ProbePolicy.FARM
+                    self.policy = _g.ProbePolicy.FARM
 
-            yield GameStateModel(
+            yield _g.GameState(
                 players=[
-                    PlayerStateModel(
+                    _g.PlayerState(
                         username=self.player.username,
                         probes=[
-                            ProbeStateModel(
-                                id=self.id, target=PointModel.from_list(self.target)
+                            _g.ProbeState(
+                                id=self.id, target=_c.Point.from_list(self.target)
                             )
                         ],
                     )
                 ]
             )
 
-    def get_state(self) -> ProbeStateModel:
+    def get_state(self) -> _g.ProbeState:
         """
         Return the probe state (position and target)
         """
-        return ProbeStateModel(
+        return _g.ProbeState(
             id=self.id,
-            pos=PointModel.from_list(self.get_current_pos()),
-            target=PointModel.from_list(self.target),
+            pos=_c.Point.from_list(self.get_current_pos()),
+            target=_c.Point.from_list(self.target),
         )
 
     @property
-    def model(self) -> ProbeModel:
-        return ProbeModel(
+    def model(self) -> _g.Probe:
+        return _g.Probe(
             id=self.id,
-            pos=PointModel.from_list(self.get_current_pos()),
-            target=PointModel.from_list(self.target),
+            pos=_c.Point.from_list(self.get_current_pos()),
+            target=_c.Point.from_list(self.target),
             alive=self.alive,
         )

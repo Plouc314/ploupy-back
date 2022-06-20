@@ -4,29 +4,18 @@ import uuid
 import numpy as np
 from typing import TYPE_CHECKING
 
-from src.core import PointModel, Coord
-from src.sio import JobManager
-
-from src.game.models import (
-    GameStateModel,
-    PlayerStateModel,
-    TurretFireProbeResponse,
-)
+from models import core as _c, game as _g
+from sio import JobManager
 
 from .entity import Entity
-from .models import (
-    ProbeStateModel,
-    TurretModel,
-    TurretStateModel,
-)
 
 if TYPE_CHECKING:
-    from src.game import Player, Map
+    from game import Player
     from .probe import Probe
 
 
 class Turret(Entity):
-    def __init__(self, player: Player, coord: Coord):
+    def __init__(self, player: Player, coord: _c.Coord):
         super().__init__(coord)
         self.player = player
         self.game = player.game
@@ -67,11 +56,11 @@ class Turret(Entity):
         if notify_client:
             self.player.job_manager.send(
                 "game_state",
-                GameStateModel(
+                _g.GameState(
                     players=[
-                        PlayerStateModel(
+                        _g.PlayerState(
                             username=self.player.username,
-                            turrets=[TurretStateModel(id=self.id, alive=False)],
+                            turrets=[_g.TurretState(id=self.id, alive=False)],
                         )
                     ]
                 ),
@@ -130,14 +119,14 @@ class Turret(Entity):
             # kill probe
             probe.die(notify_client=False)
 
-            yield TurretFireProbeResponse(
+            yield _g.TurretFireProbeResponse(
                 username=self.player.username,
                 turret_id=self.id,
-                probe=ProbeStateModel(id=probe.id),
+                probe=_g.ProbeState(id=probe.id),
             )
 
     @property
-    def model(self) -> TurretModel:
-        return TurretModel(
-            id=self.id, coord=PointModel.from_list(self._pos), alive=self.alive
+    def model(self) -> _g.Turret:
+        return _g.Turret(
+            id=self.id, coord=_c.Point.from_list(self._pos), alive=self.alive
         )

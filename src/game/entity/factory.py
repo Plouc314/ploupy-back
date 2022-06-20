@@ -2,27 +2,20 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from src.core import PointModel, Coord
-from src.sio import JobManager
+from models import core as _c, game as _g
+from sio import JobManager
 
-from src.game.models import (
-    GameStateModel,
-    MapStateModel,
-    BuildProbeResponse,
-    PlayerStateModel,
-)
-from src.game.geometry import Geometry
+from game.geometry import Geometry
 
 from .entity import Entity
-from .models import FactoryModel, FactoryStateModel, ProbeStateModel, TileStateModel
 
 if TYPE_CHECKING:
-    from src.game import Player, Map
+    from game import Player, Map
     from .probe import Probe
 
 
 class Factory(Entity):
-    def __init__(self, player: "Player", coord: Coord):
+    def __init__(self, player: "Player", coord: _c.Coord):
         super().__init__(coord)
         self.player = player
         self.config = player.config
@@ -75,6 +68,7 @@ class Factory(Entity):
         if check_loose_condition and self.player.loose_condition():
             assert notify_client, "Not implemented"
             # add back factory -> will be killed by player
+            self.alive = True
             self.player.factories.append(self)
             # kill player
             self.player.die(notify_client=True)
@@ -95,17 +89,17 @@ class Factory(Entity):
         states = []
         for probe in probes:
             probe.die(notify_client=False)
-            states.append(ProbeStateModel(id=probe.id, alive=probe.alive))
+            states.append(_g.ProbeState(id=probe.id, alive=probe.alive))
 
         if notify_client:
             self.player.job_manager.send(
                 "game_state",
-                GameStateModel(
+                _g.GameState(
                     players=[
-                        PlayerStateModel(
+                        _g.PlayerState(
                             username=self.player.username,
                             probes=states,
-                            factories=[FactoryStateModel(id=self.id, alive=False)],
+                            factories=[_g.FactoryState(id=self.id, alive=False)],
                         )
                     ]
                 ),
@@ -160,7 +154,7 @@ class Factory(Entity):
         - notify player
         - start probe job
         """
-        probe = self.player.build_probe(PointModel.from_list(self.coord))
+        probe = self.player.build_probe(_c.Point.from_list(self.coord))
 
         # check that there was enough money to build the probe
         if probe is None:
@@ -197,7 +191,7 @@ class Factory(Entity):
                 return
 
             tiles = self._get_expansion_tiles(map, i)
-            yield GameStateModel(map=MapStateModel(tiles=tiles))
+            yield _g.GameState(map=_g.MapState(tiles=tiles))
 
     async def job_probe(self, map: "Map", jb: JobManager):
         """
@@ -227,17 +221,17 @@ class Factory(Entity):
             if probe is None:
                 continue
 
-            yield BuildProbeResponse(
+            yield _g.BuildProbeResponse(
                 username=self.player.username,
                 money=self.player.money,
                 probe=probe.model,
             )
 
-    def _get_expansion_tiles(self, map: "Map", scope: int) -> list[TileStateModel]:
+    def _get_expansion_tiles(self, map: "Map", scope: int) -> list[_g.TileState]:
         """
         Return the tiles to expand on
         """
-        tiles: list[TileStateModel] = []
+        tiles: list[_g.TileState] = []
 
         coords = Geometry.square(self.coord, scope)
 
@@ -248,12 +242,12 @@ class Factory(Entity):
 
             tile.claim(self.player)
 
-            tiles.append(TileStateModel(**tile.model.dict()))
+            tiles.append(_g.TileState(**tile.model.dict()))
 
         return tiles
 
     @property
-    def model(self) -> FactoryModel:
-        return FactoryModel(
-            id=self.id, coord=PointModel.from_list(self._pos), alive=self.alive
+    def model(self) -> _g.Factory:
+        return _g.FactoryState(
+            id=self.id, coord=_c.Point.from_list(self._pos), alive=self.alive
         )

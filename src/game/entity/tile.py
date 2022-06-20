@@ -1,17 +1,14 @@
 from __future__ import annotations
-import numpy as np
 from typing import TYPE_CHECKING
 
-from src.core import PointModel, Coord
+from models import core as _c, game as _g
 
 from .entity import Entity
 from .factory import Factory
 from .turret import Turret
-from .models import TileModel, TileStateModel
 
 if TYPE_CHECKING:
-    from src.game.player import Player
-    from src.game.models import GameConfig
+    from game.player import Player
 
 
 class Tile(Entity):
@@ -20,7 +17,7 @@ class Tile(Entity):
     Occupation: score of how strongly the tile is occupied by the current owner
     """
 
-    def __init__(self, coord: Coord, config: "GameConfig"):
+    def __init__(self, coord: _c.Coord, config: _c.GameConfig):
         super().__init__(coord)
         self.config = config
         self.building: Factory | Turret | None = None
@@ -89,21 +86,21 @@ class Tile(Entity):
         """
         return self.occupation * self.config.income_rate
 
-    def get_state(self) -> TileStateModel:
+    def get_state(self) -> _g.TileState:
         """
         Return the tile state (occupation and owner)
         """
-        return TileStateModel(
+        return _g.TileState(
             id=self.id,
             owner=None if self._owner is None else self._owner.user.username,
             occupation=self.occupation,
         )
 
     @property
-    def model(self) -> TileModel:
-        return TileModel(
+    def model(self) -> _g.Tile:
+        return _g.Tile(
             id=self.id,
-            coord=PointModel.from_list(self._pos),
+            coord=_c.Point.from_list(self._pos),
             owner=None if self._owner is None else self._owner.user.username,
             occupation=self.occupation,
         )
