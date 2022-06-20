@@ -86,7 +86,7 @@ class QueueManager(Manager):
             self.leave_queue(queue, user)
             queues.append(queue)
 
-        await sio.emit("queue_state", self.get_response(queues).dict())
+        await sio.emit("man_queue_state", self.get_response(queues).dict())
 
     async def join_queue(self, queue: _s.Queue, user: _s.User) -> bool:
         """
@@ -104,7 +104,7 @@ class QueueManager(Manager):
         queue.users.append(user)
 
         if len(queue.users) < queue.game_mode.config.n_player:
-            await sio.emit("queue_state", self.get_response([queue]).dict())
+            await sio.emit("man_queue_state", self.get_response([queue]).dict())
             return False
 
         # queue is full
@@ -132,7 +132,7 @@ class QueueManager(Manager):
             self._queues.pop(q.qid, None)
 
         # broadcast updated queues
-        await sio.emit("queue_state", self.get_response(updated_qs).dict())
+        await sio.emit("man_queue_state", self.get_response(updated_qs).dict())
 
         return True
 

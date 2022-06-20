@@ -91,6 +91,8 @@ class GameState(BaseModel):
 
     gid: str
     """game id"""
+    active: bool
+    """if the game is still active"""
     gmid: str
     """game mode id"""
     users: list[_c.User]

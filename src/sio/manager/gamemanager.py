@@ -18,12 +18,15 @@ class GameManager(Manager):
     def __init__(self):
         self._games: dict[str, _s.Game] = {}
 
-    def _get_game_state(self, game: _s.Game) -> _s.GameState:
+    def _get_game_state(self, game: _s.Game, active: bool = True) -> _s.GameState:
         """
         Return the sio.Game casted to GameState
         """
         return _s.GameState(
-            gid=game.gid, gmid=game.mode.id, users=[user.user for user in game.users]
+            gid=game.gid,
+            active=active,
+            gmid=game.mode.id,
+            users=[user.user for user in game.users],
         )
 
     def get_game(
@@ -75,6 +78,7 @@ class GameManager(Manager):
         Create a new Game instance
         - Make all users enters the game room
         - Broadcast the start_game event
+        - Broadcast game state (GameManagerState)
         """
         gid = uuid.uuid4().hex
 
@@ -96,6 +100,14 @@ class GameManager(Manager):
         # broadcast start game event
         await sio.emit("start_game", game.model.dict(), to=gs.gid)
 
+        # broadcast game state
+        await sio.emit(
+            "man_game_state",
+            _s.responses.GameManagerState(
+                games=[self._get_game_state(gs)]
+            ).dict(),
+        )
+
     async def end_game(self, gid: str, results: _g.GameResult, aborted: bool):
         """
         - Post game results on api (if not aborted)
@@ -103,6 +115,7 @@ class GameManager(Manager):
         - Remove the game state from State
         - Make all users leave the game room
         - Reset game's users gid
+        - Broadcast game state (GameManagerState)
         """
         gs = self.get_game(gid=gid)
 
@@ -141,6 +154,14 @@ class GameManager(Manager):
         for user in gs.users:
             user.gid = None
             sio.leave_room(user.sid, room=gid)
+
+        # broadcast game state
+        await sio.emit(
+            "man_game_state",
+            _s.responses.GameManagerState(
+                games=[self._get_game_state(gs, active=False)]
+            ).dict(),
+        )
 
     async def disconnect(self, user: _s.User):
         """

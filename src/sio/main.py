@@ -19,6 +19,7 @@ uman = UserManager()
 qman = QueueManager()
 gman = GameManager()
 
+
 @sio.event
 async def connect(sid: str, environ: dict):
     """
@@ -41,6 +42,7 @@ async def connect(sid: str, environ: dict):
     await qman.connect()
     await gman.connect()
 
+
 @sio.event
 async def disconnect(sid: str):
     us = uman.get_user(sid=sid)
@@ -53,11 +55,31 @@ async def disconnect(sid: str):
 
 
 @sio.event
-async def user_state(sid: str, data: dict) -> _c.Response:
+async def man_user_state(sid: str, data: dict) -> _c.Response:
     """
-    Broadcast the current user state to requesting user
+    Broadcast the current user manager state to requesting user
     """
-    await sio.emit("user_state", uman.state.dict(), to=sid)
+    await sio.emit("man_user_state", uman.state.dict(), to=sid)
+
+    return _c.Response().dict()
+
+
+@sio.event
+async def man_queue_state(sid: str, data: dict) -> _c.Response:
+    """
+    Broadcast the current manager queue state to requesting user
+    """
+    await sio.emit("man_queue_state", qman.state.dict(), to=sid)
+
+    return _c.Response().dict()
+
+
+@sio.event
+async def man_game_state(sid: str, data: dict) -> _c.Response:
+    """
+    Broadcast the current game manager state to requesting game
+    """
+    await sio.emit("man_game_state", gman.state.dict(), to=sid)
 
     return _c.Response().dict()
 
@@ -78,7 +100,9 @@ async def create_queue(sid: str, data: dict) -> _c.Response:
     game_mode = await client.get_game_mode(id=model.gmid)
 
     if game_mode is None:
-        return _c.Response(success=False, msg=f"Invalid game mode id '{model.gmid}'").dict()
+        return _c.Response(
+            success=False, msg=f"Invalid game mode id '{model.gmid}'"
+        ).dict()
 
     # create queue
     qs = qman.add_queue(game_mode)
@@ -87,17 +111,7 @@ async def create_queue(sid: str, data: dict) -> _c.Response:
     qs.users.append(us)
 
     # notify all users
-    await sio.emit("queue_state", qman.get_response([qs]).dict())
-
-    return _c.Response().dict()
-
-
-@sio.event
-async def queue_state(sid: str, data: dict) -> _c.Response:
-    """
-    Broadcast the current queue state to requesting user
-    """
-    await sio.emit("queue_state", qman.state.dict(), to=sid)
+    await sio.emit("man_queue_state", qman.get_response([qs]).dict())
 
     return _c.Response().dict()
 
@@ -161,7 +175,7 @@ async def leave_queue(sid: str, data: dict) -> _c.Response:
     qman.leave_queue(queue, us)
 
     # broadcast queue state
-    await sio.emit("queue_state", qman.get_response([queue]).dict())
+    await sio.emit("man_queue_state", qman.get_response([queue]).dict())
 
     return _c.Response().dict()
 
