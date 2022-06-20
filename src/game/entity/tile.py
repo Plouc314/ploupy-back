@@ -1,14 +1,14 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from models import core as _c, game as _g
+from src.models import core as _c, game as _g
 
 from .entity import Entity
 from .factory import Factory
 from .turret import Turret
 
 if TYPE_CHECKING:
-    from game.player import Player
+    from src.game.player import Player
 
 
 class Tile(Entity):

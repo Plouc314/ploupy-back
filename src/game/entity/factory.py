@@ -2,15 +2,15 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from models import core as _c, game as _g
-from sio import JobManager
+from src.models import core as _c, game as _g
+from src.sio import JobManager
 
-from game.geometry import Geometry
+from src.game.geometry import Geometry
 
 from .entity import Entity
 
 if TYPE_CHECKING:
-    from game import Player, Map
+    from src.game import Player, Map
     from .probe import Probe
 
 

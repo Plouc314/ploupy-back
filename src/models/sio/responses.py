@@ -1,6 +1,6 @@
-from models import core as _c, game as _g
+from src.models import core as _c, game as _g
 
-import models.sio.sio as _s
+import src.models.sio.sio as _s
 
 
 class UserManagerState(_c.Response):

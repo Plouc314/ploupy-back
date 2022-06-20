@@ -4,13 +4,13 @@ import uuid
 import numpy as np
 from typing import TYPE_CHECKING
 
-from models import core as _c, game as _g
-from sio import JobManager
+from src.models import core as _c, game as _g
+from src.sio import JobManager
 
 from .entity import Entity
 
 if TYPE_CHECKING:
-    from game import Player
+    from src.game import Player
     from .probe import Probe
 
 

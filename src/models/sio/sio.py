@@ -1,8 +1,8 @@
 from pydantic import BaseModel
 
-from models import core as _c
+from src.models import core as _c
 
-from game.game import Game
+from src.game.game import Game
 
 
 class User(BaseModel):

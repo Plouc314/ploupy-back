@@ -4,7 +4,7 @@ Each class matches a POST endpoint of the API
 """
 from pydantic import BaseModel
 
-from models.core import core
+from src.models.core import core
 
 class CreateUser(core.User):
     pass

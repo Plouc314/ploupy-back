@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import core
-from models.api import args, responses
-from core import FirebaseException, ALLOWED_ORIGINS
+from src.models import core
+from src.models.api import args, responses
+from src.core import FirebaseException, ALLOWED_ORIGINS
 
-import api.mmrsystem as mmrsystem
+import src.api.mmrsystem as mmrsystem
 from .firebase import Firebase
 
 

@@ -5,8 +5,8 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
-from models import core
-from core import FirebaseException, FLAG_DEPLOY
+from src.models import core
+from src.core import FirebaseException, FLAG_DEPLOY
 
 
 if not FLAG_DEPLOY:

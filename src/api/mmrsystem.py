@@ -1,4 +1,4 @@
-from models import core
+from src.models import core
 
 def get_mmr_diff(genstats: core.GameModeStats, mode: core.GameMode, ranking: int) -> int:
     """

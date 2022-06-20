@@ -1,10 +1,10 @@
 from pydantic import BaseModel
 import aiohttp
 
-from models import core
-from models.api import args, responses
+from src.models import core
+from src.models.api import args, responses
 
-from core import FLAG_DEPLOY
+from src.core import FLAG_DEPLOY
 
 
 class Client:

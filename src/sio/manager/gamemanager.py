@@ -1,8 +1,8 @@
 import uuid
 
-from models import core, game as _g, sio as _s, api as _a
+from src.models import core, game as _g, sio as _s, api as _a
 
-from game import Game
+from src.game import Game
 
 from .manager import Manager
 from ..client import client
@@ -147,7 +147,7 @@ class GameManager(Manager):
         # broadcast overall response
         await sio.emit("game_result", response.dict(), to=gid)
 
-        # remove game from games
+        # remove game from src.games
         self._games.pop(gid, None)
 
         # leave room
@@ -175,7 +175,7 @@ class GameManager(Manager):
         if game is None:
             return
 
-        # remove user from game users (NOTE: references mismatch so use sid)
+        # remove user from src.game users (NOTE: references mismatch so use sid)
         for u in game.users:
             if u.sid == user.sid:
                 game.users.remove(u)

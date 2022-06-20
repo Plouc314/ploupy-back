@@ -1,10 +1,10 @@
 import socketio
 from pydantic import ValidationError
 
-from core import ActionException, logged
+from src.core import ActionException, logged
 
-from models import core as _c
-from models.sio import actions
+from src.models import core as _c
+from src.models.sio import actions
 
 from .sio import sio
 from .client import client

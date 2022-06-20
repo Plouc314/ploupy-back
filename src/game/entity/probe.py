@@ -4,13 +4,13 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
-from models import core as _c, game as _g
-from sio import JobManager
+from src.models import core as _c, game as _g
+from src.sio import JobManager
 
 from .entity import Entity
 
 if TYPE_CHECKING:
-    from game import Player, Map
+    from src.game import Player, Map
     from .factory import Factory
     from .tile import Tile
 

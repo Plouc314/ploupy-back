@@ -3,7 +3,7 @@ import numpy as np
 from pydantic import BaseModel
 from abc import ABC, abstractmethod
 
-from models import core as _c
+from src.models import core as _c
 
 
 class Entity(ABC):

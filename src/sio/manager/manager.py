@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from models import sio as _s
+from src.models import sio as _s
 
 
 class Manager(ABC):

@@ -7,6 +7,6 @@ from .sio import (
     GameState,
 )
 
-import models.sio.sio as sio
-import models.sio.actions as actions
-import models.sio.responses as responses
+import src.models.sio.sio as sio
+import src.models.sio.actions as actions
+import src.models.sio.responses as responses

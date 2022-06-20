@@ -1,6 +1,6 @@
 import uuid
 
-from models import core as _c, sio as _s
+from src.models import core as _c, sio as _s
 
 from .manager import Manager
 from ..sio import sio
