@@ -1,1 +1,1 @@
-web: cd ../.. ; gunicorn -w 1 -k uvicorn.workers.UvicornWorker src.sio.main:app
+web: cd ../../src ; gunicorn -w 1 -k uvicorn.workers.UvicornWorker sio.main:app
