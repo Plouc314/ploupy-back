@@ -3,22 +3,23 @@ Represents responses of the rest API
 Each class matches an endpoint of the API
 """
 
-from src.models.core import core
+from src.models.core import core as _c
 
 
-class UserData(core.Response):
-    user: core.User
+class UserData(_c.Response):
+    user: _c.User
+    mmrs: _c.UserMMRs
 
 
-class CreateUser(core.Response):
+class CreateUser(_c.Response):
     pass
 
 
-class GameMode(core.Response):
-    game_modes: list[core.GameMode]
+class GameMode(_c.Response):
+    game_modes: list[_c.GameMode]
 
 
-class GameResults(core.Response):
+class GameResults(_c.Response):
     mmrs: list[int]
     """
     new mmr of players in game (same order as ranking)
@@ -29,5 +30,5 @@ class GameResults(core.Response):
     """
 
 
-class UserStats(core.Response):
-    stats: list[core.GameModeStats]
+class UserStats(_c.Response):
+    stats: list[_c.ExtendedGameModeStats]
