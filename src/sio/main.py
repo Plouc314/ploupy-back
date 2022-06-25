@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from src.core import ActionException, logged
 
 from src.models import core as _c
-from src.models.sio import actions
+from src.models.sio import actions, responses
 
 from .sio import sio
 from .client import client
@@ -49,6 +49,9 @@ async def disconnect(sid: str):
 
     print(us.user.username, "disconnected")
 
+    # update last online time
+    await client.post_user_online(us.user.uid)
+
     await gman.disconnect(us)
     await qman.disconnect(us)
     await uman.disconnect(us)
@@ -59,9 +62,9 @@ async def man_user_state(sid: str, data: dict) -> _c.Response:
     """
     Broadcast the current user manager state to requesting user
     """
-    await sio.emit("man_user_state", uman.state.dict(), to=sid)
+    await sio.emit("man_user_state", uman.state.json(), to=sid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -69,9 +72,9 @@ async def man_queue_state(sid: str, data: dict) -> _c.Response:
     """
     Broadcast the current manager queue state to requesting user
     """
-    await sio.emit("man_queue_state", qman.state.dict(), to=sid)
+    await sio.emit("man_queue_state", qman.state.json(), to=sid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -79,9 +82,9 @@ async def man_game_state(sid: str, data: dict) -> _c.Response:
     """
     Broadcast the current game manager state to requesting game
     """
-    await sio.emit("man_game_state", gman.state.dict(), to=sid)
+    await sio.emit("man_game_state", gman.state.json(), to=sid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -95,14 +98,14 @@ async def create_queue(sid: str, data: dict) -> _c.Response:
     try:
         model = actions.CreateQueue(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     game_mode = await client.get_game_mode(id=model.gmid)
 
     if game_mode is None:
         return _c.Response(
             success=False, msg=f"Invalid game mode id '{model.gmid}'"
-        ).dict()
+        ).json()
 
     # create queue
     qs = qman.add_queue(game_mode)
@@ -111,9 +114,9 @@ async def create_queue(sid: str, data: dict) -> _c.Response:
     qs.users.append(us)
 
     # notify all users
-    await sio.emit("man_queue_state", qman.get_response([qs]).dict())
+    await sio.emit("man_queue_state", qman.get_response([qs]).json())
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -127,27 +130,27 @@ async def join_queue(sid: str, data: dict) -> _c.Response:
     try:
         model = actions.JoinQueue(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     queue = qman.get_queue(model.qid)
 
     if queue is None:
         return _c.Response(
             success=False, msg=f"Queue not found (qid: {model.qid})"
-        ).dict()
+        ).json()
 
     if us in queue.users:
-        return _c.Response(success=False, msg=f"Already in queue.").dict()
+        return _c.Response(success=False, msg=f"Already in queue.").json()
 
     # join the queue
     is_full = await qman.join_queue(queue, us)
 
     if not is_full:
-        return _c.Response().dict()
+        return _c.Response().json()
 
     await gman.create_game(queue.users, queue.game_mode)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -160,24 +163,24 @@ async def leave_queue(sid: str, data: dict) -> _c.Response:
     try:
         model = actions.LeaveQueue(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     queue = qman.get_queue(model.qid)
 
     if queue is None:
         return _c.Response(
             success=False, msg=f"Queue not found (qid: {model.qid})"
-        ).dict()
+        ).json()
 
     if not us in queue.users:
-        return _c.Response(success=False, msg=f"Not in queue.").dict()
+        return _c.Response(success=False, msg=f"Not in queue.").json()
 
     qman.leave_queue(queue, us)
 
     # broadcast queue state
-    await sio.emit("man_queue_state", qman.get_response([queue]).dict())
+    await sio.emit("man_queue_state", qman.get_response([queue]).json())
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -193,34 +196,43 @@ async def is_active_game(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is not None:
-        return _c.Response().dict()
+        return _c.Response().json()
 
     gs = gman.get_game(user=us.user)
     if gs is None:
-        return _c.Response().dict()
+        return _c.Response().json()
 
     gman.link_user_to_game(gs, us)
 
     # broadcast start game event
-    await sio.emit("start_game", gs.game.model.dict(), to=us.sid)
+    await sio.emit("start_game", responses.StartGame(gid=gs.gid).json(), to=us.sid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
 async def game_state(sid: str, data: dict) -> _c.Response:
     """
-    Broadcast the current game state to requesting user
+    - Link user to the game
+    - Broadcast the current game state to requesting user
     """
     us = uman.get_user(sid=sid)
 
-    gs = gman.get_game(gid=us.gid)
+    try:
+        model = actions.GameState(**data)
+    except ValidationError as e:
+        return _c.Response(success=False, msg="Invalid data").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
-    await sio.emit("game_state", gs.game.model.dict(), to=us.sid)
+    # link user to the game
+    gman.link_user_to_game(gs, us)
 
-    return _c.Response().dict()
+    await sio.emit("game_state", gs.game.model.json(), to=us.sid)
+
+    return _c.Response().json()
 
 
 @sio.event
@@ -232,21 +244,21 @@ async def action_resign_game(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
     try:
         model = actions.ResignGame(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     player = gs.game.get_player(us.user.username)
 
     try:
         gs.game.action_resign_game(player)
     except ActionException as e:
-        return _c.Response(success=False, msg=str(e)).dict()
+        return _c.Response(success=False, msg=str(e)).json()
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -259,23 +271,23 @@ async def action_build_factory(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
     try:
         model = actions.BuildFactory(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     player = gs.game.get_player(us.user.username)
 
     try:
         response = gs.game.action_build_factory(player, model.coord)
     except ActionException as e:
-        return _c.Response(success=False, msg=str(e)).dict()
+        return _c.Response(success=False, msg=str(e)).json()
 
-    await sio.emit("build_factory", response.dict(), to=gs.gid)
+    await sio.emit("build_factory", response.json(), to=gs.gid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -288,23 +300,23 @@ async def action_build_turret(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
     try:
         model = actions.BuildTurret(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     player = gs.game.get_player(us.user.username)
 
     try:
         response = gs.game.action_build_turret(player, model.coord)
     except ActionException as e:
-        return _c.Response(success=False, msg=str(e)).dict()
+        return _c.Response(success=False, msg=str(e)).json()
 
-    await sio.emit("build_turret", response.dict(), to=gs.gid)
+    await sio.emit("build_turret", response.json(), to=gs.gid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -317,23 +329,23 @@ async def action_move_probes(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
     try:
         model = actions.MoveProbes(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     player = gs.game.get_player(us.user.username)
 
     try:
         response = gs.game.action_move_probes(player, model.ids, model.target)
     except ActionException as e:
-        return _c.Response(success=False, msg=str(e)).dict()
+        return _c.Response(success=False, msg=str(e)).json()
 
-    await sio.emit("game_state", response.dict(), to=gs.gid)
+    await sio.emit("game_state", response.json(), to=gs.gid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -346,23 +358,23 @@ async def action_explode_probes(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
     try:
         model = actions.ExplodeProbes(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     player = gs.game.get_player(us.user.username)
 
     try:
         response = gs.game.action_explode_probes(player, model.ids)
     except ActionException as e:
-        return _c.Response(success=False, msg=str(e)).dict()
+        return _c.Response(success=False, msg=str(e)).json()
 
-    await sio.emit("game_state", response.dict(), to=gs.gid)
+    await sio.emit("game_state", response.json(), to=gs.gid)
 
-    return _c.Response().dict()
+    return _c.Response().json()
 
 
 @sio.event
@@ -375,20 +387,20 @@ async def action_probes_attack(sid: str, data: dict) -> _c.Response:
 
     gs = gman.get_game(gid=us.gid)
     if gs is None:
-        return _c.Response(success=False, msg="Game not found").dict()
+        return _c.Response(success=False, msg="Game not found").json()
 
     try:
         model = actions.ProbesAttack(**data)
     except ValidationError as e:
-        return _c.Response(success=False, msg="Invalid data").dict()
+        return _c.Response(success=False, msg="Invalid data").json()
 
     player = gs.game.get_player(us.user.username)
 
     try:
         response = gs.game.action_probes_attack(player, model.ids)
     except ActionException as e:
-        return _c.Response(success=False, msg=str(e)).dict()
+        return _c.Response(success=False, msg=str(e)).json()
 
-    await sio.emit("game_state", response.dict(), to=gs.gid)
+    await sio.emit("game_state", response.json(), to=gs.gid)
 
-    return _c.Response().dict()
+    return _c.Response().json()

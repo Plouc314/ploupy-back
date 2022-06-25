@@ -1,11 +1,12 @@
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 
-from src.models import core
+from src.models import core as _c
 from src.core import FirebaseException, FLAG_DEPLOY
 
 
@@ -19,7 +20,7 @@ class Firebase:
 
     def __init__(self):
         self._initialized = False
-        self._cache_users: dict[str, core.User] = {}
+        self._cache_users: dict[str, _c.User] = {}
         self.auth()
 
         self._config = self.load_config()
@@ -64,7 +65,7 @@ class Firebase:
         cred = credentials.Certificate(self._get_certificate())
         firebase_admin.initialize_app(cred, {"databaseURL": self.URL_DATABASE})
 
-    def load_config(self) -> core.DBConfig:
+    def load_config(self) -> _c.DBConfig:
         """
         Load the config node of the db
         """
@@ -75,12 +76,12 @@ class Firebase:
         data: dict = raw["modes"]
         modes = []
         for _id, raw_mode in data.items():
-            mode = core.GameMode(id=_id, **raw_mode)
+            mode = _c.GameMode(id=_id, **raw_mode)
             modes.append(mode)
 
-        return core.DBConfig(modes=modes)
+        return _c.DBConfig(modes=modes)
 
-    def get_game_modes(self) -> list[core.GameMode]:
+    def get_game_modes(self) -> list[_c.GameMode]:
         """
         Return all game modes
         """
@@ -88,7 +89,7 @@ class Firebase:
 
     def get_game_mode(
         self, id: str | None = None, name: str | None = None
-    ) -> core.GameMode | None:
+    ) -> _c.GameMode | None:
         """
         Return the game mode with the given id / name
         """
@@ -97,11 +98,12 @@ class Firebase:
                 return mode
         return None
 
-    def create_user(self, user: core.User) -> None:
+    def create_user(self, user: _c.User) -> None:
         """
         Create a user in the db
         """
         # build dict without uid
+        # rely on pydantic for datetime conversions
         data = user.dict()
         data.pop("uid")
 
@@ -116,7 +118,7 @@ class Firebase:
         uid: str | None = None,
         username: str | None = None,
         error: str="ignore"
-    ) -> core.User | None:
+    ) -> _c.User | None:
         """
         Get the user from the db given the uid or username
         """
@@ -136,7 +138,7 @@ class Firebase:
                     raise FirebaseException(f"User data not found for uid: '{uid}'")
 
             data["uid"] = uid
-            user = core.User(**data)
+            user = _c.User(**data)
 
             self._cache_users[uid] = user
             return user
@@ -164,9 +166,34 @@ class Firebase:
             for uid, data in results.items():
                 data["uid"] = uid
                 break
-            user = core.User(**data)
+            user = _c.User(**data)
 
             self._cache_users[uid] = user
             return user
 
         return None
+
+    def update_last_online(self, uid: str, last_online: datetime):
+        '''
+        Update the `User.last_online` field of the db for the given uid
+
+        Update the users's cache, meaning the caller posseses an instance of the user,
+        it might modify its `last_online` attribute.
+
+        Raise FirebaseException in case the uid is invalid
+        '''
+        # assert uid is valid
+        user = self.get_user(uid=uid)
+        if user is None:
+            raise FirebaseException(f"Invalid uid: '{uid}'")
+        
+        # update user instance
+        user.last_online = last_online
+
+        data = last_online.isoformat()
+        # push to db
+        db.reference(f"/users/{uid}/last_online").set(data)
+
+        # update cache
+        self._cache_users[uid] = user
+

@@ -57,6 +57,8 @@ type User = {
     username: string
     email: string
     avatar: string
+    joined_on: DateTime
+    last_online: DateTime
 }
 
 /**

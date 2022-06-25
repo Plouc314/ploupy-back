@@ -15,6 +15,10 @@ class CreateUser(_c.Response):
     pass
 
 
+class UserOnline(_c.Response):
+    pass
+
+
 class GameMode(_c.Response):
     game_modes: list[_c.GameMode]
 

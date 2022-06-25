@@ -156,6 +156,8 @@ class User(BaseModel):
     Name of the avatar
     (see ploupy-front `textures.tsx` for possible values)
     """
+    joined_on: datetime
+    last_online: datetime
 
 
 class GameMode(BaseModel):
@@ -224,7 +226,7 @@ class UserStats(BaseModel):
     """
 
     mmrs: UserMMRs
-    stats: dict[str, GameModeHistory]
+    history: dict[str, GameModeHistory]
     """
     all the game mode's histories
     keys: game mode id
@@ -237,6 +239,11 @@ class ExtendedGameModeStats(BaseModel):
     once processed, with as much insights as possible
     """
 
+    mode: GameMode
+    """
+    game mode
+    """
+
     scores: list[int]
     """
     List of occurence of the resulting position,
@@ -247,6 +254,7 @@ class ExtendedGameModeStats(BaseModel):
     dates: list[str]
     """
     List of all the dates where a game was played
+    Format: ISO
     """
 
     mmr_hist: list[int]

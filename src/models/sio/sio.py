@@ -70,10 +70,14 @@ class Game(BaseModel):
     """
     Game mode of the game
     """
-    users: list[User]
+    players: list[User]
     """
-    socket-io users that are currently connected
+    players (sio users) that are currently connected
     NOTE: no assurance that all players in game are currently connected
+    """
+    spectators: list[User]
+    """
+    spectators (sio users) that are currently connected
     """
     game: Game
     """

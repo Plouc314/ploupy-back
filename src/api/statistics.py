@@ -19,6 +19,15 @@ class Statistics:
         self._cache_mmrs: dict[str, _c.UserMMRs] = {}
         self._cache_stats: dict[str, _c.UserStats] = {}
 
+    def _cast_date(self, date: datetime) -> str:
+        """
+        Cast a datetime instance to db format
+        
+        With only HH:MM:SS and no timezone information
+        (date should still be in utc timezone)
+        """
+        return date.isoformat(timespec="seconds")
+
     def _build_user_mmrs(self, data: dict) -> _c.UserMMRs:
         """
         Build a UserMMRs instance
@@ -88,7 +97,7 @@ class Statistics:
         """
         data = {}
         for gstats in gmhist.history:
-            date = gstats.date.isoformat(timespec="seconds")
+            date = self._cast_date(gstats.date)
             data[date] = self._cast_game_stats(gstats)
 
         return data
@@ -113,7 +122,7 @@ class Statistics:
             if not mode.id in stats.keys():
                 stats[mode.id] = self._build_game_mode_history(mode.id, {})
 
-        return _c.UserStats(mmrs=mmrs, stats=stats)
+        return _c.UserStats(mmrs=mmrs, history=stats)
 
     def _cast_user_stats(self, ustats: _c.UserStats) -> dict:
         """
@@ -123,7 +132,7 @@ class Statistics:
             "mmrs": self._cast_user_mmrs(ustats.mmrs),
             "history": {
                 gmid: self._cast_game_mode_history(gmhist)
-                for gmid, gmhist in ustats.stats.items()
+                for gmid, gmhist in ustats.history.items()
             },
         }
 
@@ -207,13 +216,8 @@ class Statistics:
         if mode is None:
             raise FirebaseException(f"Invalid gmid: '{gmid}'")
 
-        # build GameModeHistory with one game to then cast it
-        gmhist = _c.GameModeHistory(mode=mode, history=[gstats])
-
-        data = self._cast_game_mode_history(gmhist)
-
-        # extract game data
-        date, gdata = data.popitem()
+        date = self._cast_date(gstats.date)
+        gdata = self._cast_game_stats(gstats)
 
         # push to db
         db.reference(f"/stats/{uid}/history/{gmid}/{date}").set(gdata)
@@ -222,9 +226,43 @@ class Statistics:
         if uid in self._cache_stats.keys():
 
             # only had game if not existing in the history
-            gmhist = self._cache_stats[uid].stats[gmid]
+            gmhist = self._cache_stats[uid].history[gmid]
             for _gstats in gmhist.history:
                 if _gstats.date == gstats.date:
                     break
             else:
                 gmhist.history.append(gstats)
+
+    def get_game_mode_stats(
+        self, uid: str, gmhist: _c.GameModeHistory
+    ) -> _c.ExtendedGameModeStats:
+        """
+        Build the ExtendedGameModeStats instance given a GameModeHistory
+
+        Note: return an instance with default values in case `uid` is invalid
+        """
+        # initialize position occurences at 0
+        scores = [0 for i in range(gmhist.mode.config.n_player)]
+
+        dates: list[str] = []
+        mmr_hist: list[int] = []
+
+        for gstats in gmhist.history:
+
+            if not uid in gstats.ranking:
+                continue
+
+            score_idx = gstats.ranking.index(uid)
+            date = self._cast_date(gstats.date)
+            mmr = gstats.mmr
+
+            scores[score_idx] += 1
+            dates.append(date)
+            mmr_hist.append(mmr)
+
+        return _c.ExtendedGameModeStats(
+            mode=gmhist.mode,
+            scores=scores,
+            dates=dates,
+            mmr_hist=mmr_hist,
+        )

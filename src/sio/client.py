@@ -1,3 +1,4 @@
+import json
 from pydantic import BaseModel
 import aiohttp
 
@@ -48,6 +49,9 @@ class Client:
     async def post(self, endpoint: str, data: BaseModel | dict) -> dict | None:
         """
         Send a POST requests to the api
+
+        Note: doesn't convert BaseModel data using `json()` but rather `dict()`
+            thus it can not handle `datetime` attributes
         """
         if self.session is None:
             self.session = aiohttp.ClientSession()
@@ -63,12 +67,21 @@ class Client:
                     return None
                 data = await response.json()
         except aiohttp.ClientError as e:
+            print("WARNING POST", e)
             return None
 
         if not data.get("success", False):
             return None
 
         return data
+
+    async def post_user_online(self, uid: str) -> None:
+        """
+        Ping api on user online status
+        """
+        print("post user online")
+        data = args.UserOnline(uid=uid)
+        response = await self.post("user-online", data)
 
     async def get_user_data(self, uid: str) -> responses.UserData | None:
         """

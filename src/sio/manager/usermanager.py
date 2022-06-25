@@ -22,7 +22,7 @@ class UserManager(Manager):
         user_sio = _s.User(sid=sid, user=user)
         self._users[sid] = user_sio
 
-        await sio.emit("man_user_state", self.get_user_response(user_sio, True).dict())
+        await sio.emit("man_user_state", self.get_user_response(user_sio, True).json())
 
         return user_sio
 
@@ -33,7 +33,7 @@ class UserManager(Manager):
         """
         self._users.pop(user.sid, None)
 
-        await sio.emit("man_user_state", self.get_user_response(user, False).dict())
+        await sio.emit("man_user_state", self.get_user_response(user, False).json())
 
     def get_user(
         self, sid: str | None = None, username: str | None = None

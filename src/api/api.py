@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,9 +44,12 @@ def user_data(
     if user is None:
         return _c.Response(success=False, msg="User not found.")
 
+    mmrs = statistics.get_user_mmrs(uid)
+
     return _a.responses.UserData(
         success=True,
         user=user,
+        mmrs=mmrs,
     )
 
 
@@ -56,12 +59,26 @@ def create_user(data: _a.args.CreateUser) -> _a.responses.CreateUser:
     Create the user if possible and return if it was succesful
     """
 
-    if firebase.get_user(uid=data.uid) is None:
-        firebase.create_user(data)
-        return _c.Response(success=True)
+    if firebase.get_user(uid=data.uid) is not None:
+        return _c.Response(success=False, msg=f"User already exists")
 
-    # user found
-    return _c.Response(success=False, msg=f"User already exists")
+    user = _c.User(last_online=datetime.now(tz=timezone.utc), **data.dict())
+
+    firebase.create_user(user)
+    return _c.Response(success=True)
+
+
+@app.post("/api/user-online")
+def user_online(data: _a.args.UserOnline) -> _a.responses.UserOnline:
+    """
+    Update the last online datetime of the user.
+    Set it as now.
+    """
+    print("user online", data.uid)
+    date = datetime.now(tz=timezone.utc)
+    firebase.update_last_online(data.uid, date)
+
+    return _c.Response(success=True)
 
 
 @app.get("/api/game-mode")
@@ -94,7 +111,7 @@ def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
     if mode is None:
         return _c.Response(success=False, msg="Mode not found.")
 
-    date = datetime.now()
+    date = datetime.now(tz=timezone.utc)
     mmrs = []
     mmr_diffs = []
 
@@ -108,19 +125,19 @@ def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
             continue
 
         # get user mmrs
-        mmrs = statistics.get_user_mmrs(uid)
+        ummrs = statistics.get_user_mmrs(uid)
 
         diff = mmrsystem.get_mmr_diff(mode, i)
-        mmrs.mmrs[mode.id] += diff
+        ummrs.mmrs[mode.id] += diff
 
-        mmrs.append(mmrs.mmrs[mode.id])
+        mmrs.append(ummrs.mmrs[mode.id])
         mmr_diffs.append(diff)
 
         # update db user mmrs
-        statistics.update_user_mmrs(uid, mmrs)
+        statistics.update_user_mmrs(uid, ummrs)
 
         # build game stats
-        gstats = _c.GameStats(date=date, mmr=mmrs.mmrs[mode.id], ranking=data.ranking)
+        gstats = _c.GameStats(date=date, mmr=ummrs.mmrs[mode.id], ranking=data.ranking)
 
         # push game on db
         statistics.push_game_stats(uid, mode.id, gstats)
@@ -142,9 +159,15 @@ def user_stats(uid: str) -> _a.responses.UserStats:
     if user is None:
         return _c.Response(success=False, msg=f"Invalid user id '{uid}'")
 
-    # get stats
-    stats = firebase.get_user_stats(uid)
+    # get user stats
+    ustats = statistics.get_user_stats(uid)
+
+    # build response
+    stats = []
+    for gmhist in ustats.history.values():
+        egmstats = statistics.get_game_mode_stats(uid, gmhist)
+        stats.append(egmstats)
 
     return _a.responses.UserStats(
-        stats=list(stats.stats.values()),
+        stats=stats,
     )
