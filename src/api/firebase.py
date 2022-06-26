@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import firebase_admin
 from firebase_admin import credentials
-from firebase_admin import db
+from firebase_admin import db, auth
 
 from src.models import core as _c
 from src.core import FirebaseException, FLAG_DEPLOY
@@ -17,9 +17,13 @@ if not FLAG_DEPLOY:
 class Firebase:
 
     URL_DATABASE = os.environ["URL_DATABASE"]
+    SIO_TOKEN = os.environ["SIO_TOKEN"]
 
     def __init__(self):
         self._initialized = False
+        # key: jwt value: uid
+        self._cache_jwts: dict[str, str] = {}
+        # key: uid
         self._cache_users: dict[str, _c.User] = {}
         self.auth()
 
@@ -98,6 +102,38 @@ class Firebase:
                 return mode
         return None
 
+    def auth_sio_client(self, siotk: str) -> bool:
+        """
+        Verify the sio client token
+
+        Return if it is valid
+        """
+        return siotk == self.SIO_TOKEN
+
+    def auth_jwt(self, jwt: str) -> str | None:
+        """
+        Verify that the given id token is valid
+
+        Return the user's `uid` if valid, None otherwise
+        """
+        # look in cache
+        if jwt in self._cache_jwts.keys():
+            return self._cache_jwts[jwt]
+
+        try:
+            response = auth.verify_id_token(jwt)
+            uid = response["uid"]
+
+        # there is about a million things that could go wrong...
+        except Exception as e:
+            print(f"WARGING AUTH: {type(e)} {str(e)}")
+            return None
+
+        # update cache
+        self._cache_jwts[jwt] = uid
+
+        return uid
+
     def create_user(self, user: _c.User) -> None:
         """
         Create a user in the db
@@ -114,10 +150,7 @@ class Firebase:
         self._cache_users[user.uid] = user
 
     def get_user(
-        self,
-        uid: str | None = None,
-        username: str | None = None,
-        error: str="ignore"
+        self, uid: str | None = None, username: str | None = None, error: str = "ignore"
     ) -> _c.User | None:
         """
         Get the user from the db given the uid or username
@@ -161,7 +194,9 @@ class Firebase:
                 if error == "ignore":
                     return None
                 else:
-                    raise FirebaseException(f"No user found with username: '{username}'")
+                    raise FirebaseException(
+                        f"No user found with username: '{username}'"
+                    )
 
             for uid, data in results.items():
                 data["uid"] = uid
@@ -174,19 +209,19 @@ class Firebase:
         return None
 
     def update_last_online(self, uid: str, last_online: datetime):
-        '''
+        """
         Update the `User.last_online` field of the db for the given uid
 
         Update the users's cache, meaning the caller posseses an instance of the user,
         it might modify its `last_online` attribute.
 
         Raise FirebaseException in case the uid is invalid
-        '''
+        """
         # assert uid is valid
         user = self.get_user(uid=uid)
         if user is None:
             raise FirebaseException(f"Invalid uid: '{uid}'")
-        
+
         # update user instance
         user.last_online = last_online
 
@@ -196,4 +231,3 @@ class Firebase:
 
         # update cache
         self._cache_users[uid] = user
-

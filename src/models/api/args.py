@@ -17,10 +17,15 @@ class CreateUser(BaseModel):
 
 
 class UserOnline(BaseModel):
-    uid: str
+    jwt: str
 
 
 class GameResults(BaseModel):
+
+    siotk: str
+    """
+    Token of the socket-io client
+    """
 
     gmid: str
     """

@@ -6,6 +6,10 @@ Each class matches an endpoint of the API
 from src.models.core import core as _c
 
 
+class UserAuth(_c.Response):
+    uid: str
+
+
 class UserData(_c.Response):
     user: _c.User
     mmrs: _c.UserMMRs

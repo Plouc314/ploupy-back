@@ -12,14 +12,14 @@ class UserManager(Manager):
     def __init__(self):
         self._users: dict[str, _s.User] = {}
 
-    async def connect(self, sid: str, user: _c.User) -> _s.User:
+    async def connect(self, sid: str, jwt: str, user: _c.User) -> _s.User:
         """
         - Build and add a new sio.User instance from the given user
         - Broadcast user connection
 
         Return the sio.User
         """
-        user_sio = _s.User(sid=sid, user=user)
+        user_sio = _s.User(sid=sid, jwt=jwt, user=user)
         self._users[sid] = user_sio
 
         await sio.emit("man_user_state", self.get_user_response(user_sio, True).json())

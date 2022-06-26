@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.models import core as _c, api as _a
@@ -29,6 +29,20 @@ statistics = Statistics(firebase)
 @app.get("/ping")
 def ping():
     return "Hello world!"
+
+
+@app.get("/api/user-auth")
+def user_auth(jwt: str) -> _a.responses.UserAuth:
+    """
+    Verify the given id token and if valid,
+    return the corresponding uid
+    """
+    uid = firebase.auth_jwt(jwt)
+
+    if uid is None:
+        return _c.Response(success=False, msg="Invalid id token.")
+
+    return _a.responses.UserAuth(uid=uid)
 
 
 @app.get("/api/user-data")
@@ -74,9 +88,12 @@ def user_online(data: _a.args.UserOnline) -> _a.responses.UserOnline:
     Update the last online datetime of the user.
     Set it as now.
     """
-    print("user online", data.uid)
+    uid = firebase.auth_jwt(data.jwt)
+    if uid is None:
+        return _c.Response(success=False, msg="Invalid id token")
+
     date = datetime.now(tz=timezone.utc)
-    firebase.update_last_online(data.uid, date)
+    firebase.update_last_online(uid, date)
 
     return _c.Response(success=True)
 
@@ -106,6 +123,10 @@ def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
 
     Return the new mmrs and the mmr differences
     """
+    # handle auth -> requests should only come from sio client
+    if not firebase.auth_sio_client(data.siotk):
+        return _c.Response(success=False, msg="Invalid socket-io token")
+
     mode = firebase.get_game_mode(id=data.gmid)
 
     if mode is None:

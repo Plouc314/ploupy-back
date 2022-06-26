@@ -30,8 +30,10 @@ class GameManager(Manager):
         )
 
     def _is_user(self, users: list[_s.User], user: _s.User) -> bool:
-        '''
-        '''
+        """
+        Return if the `user` is in the list of `users`,
+        based on their uids
+        """
         for u in users:
             if u.user.uid == user.user.uid:
                 return True
@@ -148,9 +150,7 @@ class GameManager(Manager):
         if not aborted:
             # notify api of game results
             response = await client.post_game_result(
-                _a.args.GameResults(
-                    gmid=gs.mode.id, ranking=[user.uid for user in results.ranking]
-                )
+                gmid=gs.mode.id, ranking=[user.uid for user in results.ranking]
             )
             if response is not None:
                 mmrs = response.mmrs

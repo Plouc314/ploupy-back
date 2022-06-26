@@ -23,22 +23,25 @@ gman = GameManager()
 @sio.event
 async def connect(sid: str, environ: dict):
     """
-    Handle the connection, require a `http-uid` header
+    Handle the connection, require a `http-jwt` header
     """
     print(sid, "connected")
-    uid = environ.get("HTTP_UID", None)
+    jwt = environ.get("HTTP_JWT", None)
 
-    if uid is None:
+    if jwt is None:
         return False
 
-    response = await client.get_user_data(uid)
+    response = await client.get_user_auth(jwt)
+    if response is None:
+        return False
 
+    response = await client.get_user_data(response.uid)
     if response is None:
         return False
 
     print(response.user.username, "connected")
 
-    await uman.connect(sid, response.user)
+    await uman.connect(sid, jwt, response.user)
     await qman.connect()
     await gman.connect()
 
@@ -50,7 +53,7 @@ async def disconnect(sid: str):
     print(us.user.username, "disconnected")
 
     # update last online time
-    await client.post_user_online(us.user.uid)
+    await client.post_user_online(us)
 
     await gman.disconnect(us)
     await qman.disconnect(us)
