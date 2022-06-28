@@ -69,21 +69,25 @@ class QueueManager(Manager):
         Pass
         """
 
-    async def disconnect(self, user: _s.User):
+    async def disconnect(self, pers: _s.Person):
         """
+        - If visitor, do nothing
         - Remove user from all queues where he's presents
         - Broadcast all queue changes to clients
         """
+        if not isinstance(pers, _s.User):
+            return
+
         to_update_qs = {}
 
         for queue in self._queues.values():
-            if user in queue.users:
+            if pers in queue.users:
                 to_update_qs[queue.qid] = queue
 
         queues = []
 
         for queue in to_update_qs.values():
-            self.leave_queue(queue, user)
+            self.leave_queue(queue, pers)
             queues.append(queue)
 
         await sio.emit("man_queue_state", self.get_response(queues).json())

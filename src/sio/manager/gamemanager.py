@@ -29,6 +29,16 @@ class GameManager(Manager):
             users=[player.user for player in game.players],
         )
 
+    def _is_pers(self, perss: list[_s.Person], pers: _s.Person) -> bool:
+        """
+        Return if the `pers` is in the list of `perss`,
+        based on their sids
+        """
+        for p in perss:
+            if p.sid == pers.sid:
+                return True
+        return False
+
     def _is_user(self, users: list[_s.User], user: _s.User) -> bool:
         """
         Return if the `user` is in the list of `users`,
@@ -73,6 +83,21 @@ class GameManager(Manager):
         """
         Pass
         """
+
+    def link_visitor_to_game(self, gs: _s.Game, visitor: _s.Visitor):
+        """
+        Link a visitor to a game, as a spectator
+
+        - Make visitor enters the game room
+        - Set visitor `gid` attribute
+        - If not socket-io visitor in sio.Game spectators, add it
+        """
+        # link as spectator
+        if not self._is_pers(gs.spectators, visitor):
+            gs.spectators.append(visitor)
+
+        visitor.gid = gs.gid
+        sio.enter_room(visitor.sid, room=gs.gid)
 
     def link_user_to_game(self, gs: _s.Game, user: _s.User):
         """
@@ -174,9 +199,9 @@ class GameManager(Manager):
         for user in gs.players:
             user.gid = None
             sio.leave_room(user.sid, room=gid)
-        for user in gs.spectators:
-            user.gid = None
-            sio.leave_room(user.sid, room=gid)
+        for pers in gs.spectators:
+            pers.gid = None
+            sio.leave_room(pers.sid, room=gid)
 
         # broadcast game state
         await sio.emit(
@@ -186,28 +211,29 @@ class GameManager(Manager):
             ).json(),
         )
 
-    async def disconnect(self, user: _s.User):
+    async def disconnect(self, pers: _s.Person):
         """
-        Disconnect the sio.User from the game
+        Disconnect the sio.Person from the game
         NOTE: do NOT RESIGN the game for the user
 
         In case nobody is connected to the game anymore,
         end the game
         """
-        gs = self.get_game(gid=user.gid)
+
+        gs = self.get_game(gid=pers.gid)
         if gs is None:
             return
 
         # NOTE: references mismatch so use sid
         # remove players user
         for u in gs.players:
-            if u.sid == user.sid:
+            if u.sid == pers.sid:
                 gs.players.remove(u)
                 break
         # remove spectator user
-        for u in gs.spectators:
-            if u.sid == user.sid:
-                gs.spectators.remove(u)
+        for p in gs.spectators:
+            if p.sid == pers.sid:
+                gs.spectators.remove(p)
                 break
 
         if len(gs.players) == 0 and len(gs.spectators) == 0:

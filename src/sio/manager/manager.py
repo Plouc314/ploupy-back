@@ -17,9 +17,9 @@ class Manager(ABC):
         """
 
     @abstractmethod
-    async def disconnect(self, user: _s.User):
+    async def disconnect(self, pers: _s.Person):
         """
-        Called on user disconnection (in disconnect sio-event)
+        Called on person disconnection (in disconnect sio-event)
         """
 
     @property

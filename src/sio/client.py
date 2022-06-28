@@ -95,7 +95,6 @@ class Client:
         """
         Ping api on user online status
         """
-        print("post user online")
         data = args.UserOnline(jwt=user.jwt)
         response = await self.post("user-online", data)
 

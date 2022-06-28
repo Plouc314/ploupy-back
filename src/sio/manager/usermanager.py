@@ -2,6 +2,7 @@ from src.models import core as _c, sio as _s
 
 from .manager import Manager
 from ..sio import sio
+from ..client import client
 
 
 class UserManager(Manager):
@@ -11,29 +12,48 @@ class UserManager(Manager):
 
     def __init__(self):
         self._users: dict[str, _s.User] = {}
+        self._visitors: dict[str, _s.Visitor] = {}
 
-    async def connect(self, sid: str, jwt: str, user: _c.User) -> _s.User:
+    async def connect(self, sid: str, jwt: str | None = None) -> _s.User | _s.Visitor:
         """
-        - Build and add a new sio.User instance from the given user
-        - Broadcast user connection
+        - Verify jwt auth
+        - If auth successful get user data
+        - Build and add a new sio.User/sio.Visitor instance
+        - If user, broadcast user connection
 
-        Return the sio.User
+        Return the sio.User / sio.Visitor
         """
-        user_sio = _s.User(sid=sid, jwt=jwt, user=user)
+        response = await client.get_user_auth(jwt)
+        if response is None:
+            visitor = _s.Visitor(sid=sid)
+            self._visitors[sid] = visitor
+            return visitor
+
+        response = await client.get_user_data(response.uid)
+        if response is None:
+            visitor = _s.Visitor(sid=sid)
+            self._visitors[sid] = visitor
+            return visitor
+
+        user_sio = _s.User(sid=sid, jwt=jwt, user=response.user)
         self._users[sid] = user_sio
 
         await sio.emit("man_user_state", self.get_user_response(user_sio, True).json())
 
         return user_sio
 
-    async def disconnect(self, user: _s.User):
+    async def disconnect(self, pers: _s.Person):
         """
-        - Remove the user from the UserManager
-        - Broadcast user disconnection
+        - Remove the user/visitor from the UserManager
+        - If user, broadcast user disconnection
         """
-        self._users.pop(user.sid, None)
+        if isinstance(pers, _s.Visitor):
+            self._visitors.pop(pers.sid, None)
 
-        await sio.emit("man_user_state", self.get_user_response(user, False).json())
+        if isinstance(pers, _s.User):
+            self._users.pop(pers.sid, None)
+
+            await sio.emit("man_user_state", self.get_user_response(pers, False).json())
 
     def get_user(
         self, sid: str | None = None, username: str | None = None
@@ -51,6 +71,20 @@ class UserManager(Manager):
             return None
         return None
 
+    def get_visitor(self, sid: str) -> _s.Visitor | None:
+        """
+        Get the sio visitor with given sid,
+        return None if visitor not found
+        """
+        return self._visitors.get(sid, None)
+
+    def get_person(self, sid: str) -> _s.Person | None:
+        """
+        Get the sio person (user/visitor) with given sid,
+        return None if person not found
+        """
+        return self.get_user(sid=sid) or self.get_visitor(sid)  # syntaxic sugar...
+
     def get_user_response(
         self, user: _s.User, connected: bool
     ) -> _s.responses.UserManagerState:
@@ -60,7 +94,7 @@ class UserManager(Manager):
         return _s.responses.UserManagerState(
             users=[_s.UserState(connected=connected, user=user.user)]
         )
-    
+
     @property
     def state(self) -> _s.responses.UserManagerState:
         return _s.responses.UserManagerState(
