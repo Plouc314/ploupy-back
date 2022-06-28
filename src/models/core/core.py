@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import datetime
 from pydantic import BaseModel
 from typing import Literal
 
@@ -155,6 +156,8 @@ class User(BaseModel):
     Name of the avatar
     (see ploupy-front `textures.tsx` for possible values)
     """
+    joined_on: datetime
+    last_online: datetime
 
 
 class GameMode(BaseModel):
@@ -175,26 +178,87 @@ class DBConfig(BaseModel):
     modes: list[GameMode]
 
 
-class GameModeStats(BaseModel):
+class GameStats(BaseModel):
     """
-    Represent the statistics and ranking of a user
+    Represents the statistics of one game
+    """
+
+    date: datetime
+
+    mmr: int
+    """
+    MMR of the user AFTER the game
+    """
+
+    ranking: list[str]
+    """
+    List of UIDs of the player in the game (including self)
+    sorted by resulting position, i.e. best (index 0) to worst
+    """
+
+
+class UserMMRs(BaseModel):
+    """
+    Represents the current MMRs of the user in all game modes
+    """
+
+    mmrs: dict[str, int]
+    """
+    Key: game mode id
+    Value: current MMR
+    """
+
+
+class GameModeHistory(BaseModel):
+    """
+    Represents the history of all played games
     in a specific mode
     """
 
     mode: GameMode
-    mmr: int
-    scores: list[int]
+    history: list[GameStats]
 
 
 class UserStats(BaseModel):
     """
-    Represent the statistics and ranking of a user
+    Represents the statistics and ranking of a user
     in all the modes
     """
 
-    uid: str
-    stats: dict[str, GameModeStats]
+    mmrs: UserMMRs
+    history: dict[str, GameModeHistory]
     """
-    all the game mode's stats
+    all the game mode's histories
     keys: game mode id
+    """
+
+
+class ExtendedGameModeStats(BaseModel):
+    """
+    Represents the statistics for a game mode
+    once processed, with as much insights as possible
+    """
+
+    mode: GameMode
+    """
+    game mode
+    """
+
+    scores: list[int]
+    """
+    List of occurence of the resulting position,
+    for ex the value at index 0 indicates the number
+    of times the user finished in first position
+    """
+
+    dates: list[str]
+    """
+    List of all the dates where a game was played
+    Format: ISO
+    """
+
+    mmr_hist: list[int]
+    """
+    List of all the values of the MMR over time
+    (same order as `dates`)
     """

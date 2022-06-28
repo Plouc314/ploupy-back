@@ -1,11 +1,12 @@
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 
 import firebase_admin
 from firebase_admin import credentials
-from firebase_admin import db
+from firebase_admin import db, auth
 
-from src.models import core
+from src.models import core as _c
 from src.core import FirebaseException, FLAG_DEPLOY
 
 
@@ -16,11 +17,14 @@ if not FLAG_DEPLOY:
 class Firebase:
 
     URL_DATABASE = os.environ["URL_DATABASE"]
+    SIO_TOKEN = os.environ["SIO_TOKEN"]
 
     def __init__(self):
         self._initialized = False
-        self._cache_users: dict[str, core.User] = {}
-        self._cache_stats: dict[str, core.UserStats] = {}
+        # key: jwt value: uid
+        self._cache_jwts: dict[str, str] = {}
+        # key: uid
+        self._cache_users: dict[str, _c.User] = {}
         self.auth()
 
         self._config = self.load_config()
@@ -65,7 +69,7 @@ class Firebase:
         cred = credentials.Certificate(self._get_certificate())
         firebase_admin.initialize_app(cred, {"databaseURL": self.URL_DATABASE})
 
-    def load_config(self) -> core.DBConfig:
+    def load_config(self) -> _c.DBConfig:
         """
         Load the config node of the db
         """
@@ -76,12 +80,12 @@ class Firebase:
         data: dict = raw["modes"]
         modes = []
         for _id, raw_mode in data.items():
-            mode = core.GameMode(id=_id, **raw_mode)
+            mode = _c.GameMode(id=_id, **raw_mode)
             modes.append(mode)
 
-        return core.DBConfig(modes=modes)
+        return _c.DBConfig(modes=modes)
 
-    def get_game_modes(self) -> list[core.GameMode]:
+    def get_game_modes(self) -> list[_c.GameMode]:
         """
         Return all game modes
         """
@@ -89,7 +93,7 @@ class Firebase:
 
     def get_game_mode(
         self, id: str | None = None, name: str | None = None
-    ) -> core.GameMode | None:
+    ) -> _c.GameMode | None:
         """
         Return the game mode with the given id / name
         """
@@ -98,11 +102,44 @@ class Firebase:
                 return mode
         return None
 
-    def create_user(self, user: core.User) -> None:
+    def auth_sio_client(self, siotk: str) -> bool:
+        """
+        Verify the sio client token
+
+        Return if it is valid
+        """
+        return siotk == self.SIO_TOKEN
+
+    def auth_jwt(self, jwt: str) -> str | None:
+        """
+        Verify that the given id token is valid
+
+        Return the user's `uid` if valid, None otherwise
+        """
+        # look in cache
+        if jwt in self._cache_jwts.keys():
+            return self._cache_jwts[jwt]
+
+        try:
+            response = auth.verify_id_token(jwt)
+            uid = response["uid"]
+
+        # there is about a million things that could go wrong...
+        except Exception as e:
+            print(f"WARGING AUTH: {type(e)} {str(e)}")
+            return None
+
+        # update cache
+        self._cache_jwts[jwt] = uid
+
+        return uid
+
+    def create_user(self, user: _c.User) -> None:
         """
         Create a user in the db
         """
         # build dict without uid
+        # rely on pydantic for datetime conversions
         data = user.dict()
         data.pop("uid")
 
@@ -113,11 +150,8 @@ class Firebase:
         self._cache_users[user.uid] = user
 
     def get_user(
-        self,
-        uid: str | None = None,
-        username: str | None = None,
-        error: str="ignore"
-    ) -> core.User | None:
+        self, uid: str | None = None, username: str | None = None, error: str = "ignore"
+    ) -> _c.User | None:
         """
         Get the user from the db given the uid or username
         """
@@ -137,7 +171,7 @@ class Firebase:
                     raise FirebaseException(f"User data not found for uid: '{uid}'")
 
             data["uid"] = uid
-            user = core.User(**data)
+            user = _c.User(**data)
 
             self._cache_users[uid] = user
             return user
@@ -160,124 +194,40 @@ class Firebase:
                 if error == "ignore":
                     return None
                 else:
-                    raise FirebaseException(f"No user found with username: '{username}'")
+                    raise FirebaseException(
+                        f"No user found with username: '{username}'"
+                    )
 
             for uid, data in results.items():
                 data["uid"] = uid
                 break
-            user = core.User(**data)
+            user = _c.User(**data)
 
             self._cache_users[uid] = user
             return user
 
         return None
 
-    def _get_default_gmstats(self, mode: core.GameMode) -> core.GameModeStats:
+    def update_last_online(self, uid: str, last_online: datetime):
         """
-        Build GeneralStatsMode instance for given mode with default values
+        Update the `User.last_online` field of the db for the given uid
+
+        Update the users's cache, meaning the caller posseses an instance of the user,
+        it might modify its `last_online` attribute.
+
+        Raise FirebaseException in case the uid is invalid
         """
-        # build general stats with 0 occurence in all possible positions
-        return core.GameModeStats(
-            mode=mode,
-            mmr=100,
-            scores=[0 for n in range(mode.config.n_player)],
-        )
+        # assert uid is valid
+        user = self.get_user(uid=uid)
+        if user is None:
+            raise FirebaseException(f"Invalid uid: '{uid}'")
 
-    def get_user_stats(self, uid: str) -> core.UserStats:
-        """
-        Get the user stats from the db
-        
-        Assume the uid is valid.
-        """
-        # look in cache
-        if uid in self._cache_stats.keys():
-            return self._cache_stats[uid]
+        # update user instance
+        user.last_online = last_online
 
-        # fetch data
-        data: dict = db.reference(f"/stats/{uid}").get()
-
-        if data is None:
-            stats = core.UserStats(
-                uid=uid,
-                stats={
-                    mode.name: self._get_default_gmstats(mode)
-                    for mode in self._config.modes
-                },
-            )
-
-        else:
-            # build UserStats (see schemas.d.ts for db structure)
-            user_stats: dict[str, core.GameModeStats] = {}
-
-            # build using db data
-            for _id, stats in data.items():
-
-                # get game mode
-                mode = self.get_game_mode(id=_id)
-
-                gmstats = core.GameModeStats(
-                    mode=mode,
-                    mmr=stats["mmr"],
-                    scores=stats["scores"],
-                )
-                user_stats[_id] = gmstats
-
-            # fill potentially missing data
-            for gmid in self._gmids:
-                if not gmid in user_stats.keys():
-                    mode = self.get_game_mode(id=gmid)
-                    user_stats[gmid] = self._get_default_gmstats(mode)
-
-            stats = core.UserStats(uid=uid, stats=user_stats)
+        data = last_online.isoformat()
+        # push to db
+        db.reference(f"/users/{uid}/last_online").set(data)
 
         # update cache
-        self._cache_stats[uid] = stats
-        return stats
-
-    def update_user_stats(
-        self,
-        user_stats: core.UserStats | None = None,
-        uid: str | None = None,
-        gmid: str | None = None,
-        stats: core.GameModeStats | None = None,
-    ):
-        """
-        Update the user stats by giving one of:
-        - `user_stats`
-            Update all the stats
-        - `uid`, `gmid`, `stats`
-            Update the stats for one mode
-        """
-        if user_stats is not None:
-            # build db data
-            data = {}
-            for gmstats in user_stats.stats.values():
-                data[gmstats.mode.id] = {
-                    "mmr": gmstats.mmr,
-                    "scores": gmstats.scores,
-                }
-
-            # push to db
-            db.reference(f"/stats/{user_stats.uid}").set(data)
-
-            # update cache
-            self._cache_stats[uid] = user_stats
-
-        elif not None in (uid, gmid, stats):
-
-            game_mode = self.get_game_mode(id=gmid)
-
-            if game_mode is None:
-                raise FirebaseException(f"Invalid game mode id '{gmid}'")
-
-            # build db data
-            data = {
-                "mmr": stats.mmr,
-                "scores": stats.scores,
-            }
-
-            # push to db
-            db.reference(f"/stats/{uid}/{game_mode.id}").set(data)
-
-            # update cache
-            self._cache_stats[uid].stats[game_mode.id] = stats
+        self._cache_users[uid] = user

@@ -11,11 +11,18 @@ type UID = string
  */
 type ID = string
 
+/**
+ * Date and time, formatted as ISO 8601
+ */
+type DateTime = string
+
 type int = number
 type float = number
 
 /**
  * Overall schema of the entire database
+ * 
+ * @path /
  */
 type DB = {
     config: Config
@@ -25,6 +32,8 @@ type DB = {
 
 /**
  * Global configurations
+ * 
+ * @path /config
  */
 type Config = {
     /**
@@ -33,41 +42,75 @@ type Config = {
     modes: Record<ID, GameMode>
 }
 
+/**
+ * @path /config/modes/{id}
+ */
 type GameMode = {
     name: string
     config: GameConfig
 }
 
+/**
+ * @path /users/{uid}
+ */
 type User = {
     username: string
     email: string
     avatar: string
+    joined_on: DateTime
+    last_online: DateTime
 }
 
 /**
- * Collection of statistics for (potentially) all game modes
- * ID: Config.modes.ID
+ * Collection of statistics for all game modes
+ * where the user played in
+ * 
+ * @path /stats/{uid}
  */
-type UserStats = Record<ID, Stats>
+type UserStats = {
+    /**
+     * Current user MMR
+     * ID: Config.modes.ID
+     */
+    mmrs: Record<ID, int>
+    /**
+     * History of the games per game mode
+     * ID: Config.modes.ID
+     */
+    history: Record<ID, GameHistory>
+}
+
 
 /**
- * Statistics for one game mode
+ * Collection of all played games statistics
+ * indexed by datetime (for one game mode)
+ * 
+ * @path /stats/{uid}/history/{id}
  */
-type Stats = {
+type GameHistory = Record<DateTime, GameStats>
+
+
+/**
+ * Statistics for one game
+ * 
+ * @path /stats/{uid}/history/{id}/{datetime}
+ */
+type GameStats = {
     /**
-     * Ranking of the user for this game mode
+     * MMR of the user AFTER the game
      */
     mmr: int
     /**
-     * List of occurence of the resulting position,
-     * for ex the value at index 0 indicates the number
-     * of times the user finished in first position
+     * List of UIDs of the player in the game (including self)
+     * sorted by resulting position, i.e. best (index 0) to worst
      */
-    scores: int[]
+    ranking: UID[]
 }
 
 /**
  * Global configuration of the game
+ * 
+ * @path /config/modes/{id}/config
  */
 type GameConfig = {
     /** 

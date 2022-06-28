@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 from src.models.core import core
 
+
 class CreateQueue(BaseModel):
     gmid: str
     """game mode id"""
@@ -13,6 +14,10 @@ class JoinQueue(BaseModel):
 
 class LeaveQueue(BaseModel):
     qid: str
+
+
+class GameState(BaseModel):
+    gid: str
 
 
 class ResignGame(BaseModel):

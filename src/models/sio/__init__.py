@@ -1,6 +1,8 @@
 from .sio import (
+    Person,
     User,
     UserState,
+    Visitor,
     Queue,
     QueueState,
     Game,

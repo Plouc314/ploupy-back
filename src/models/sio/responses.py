@@ -31,6 +31,14 @@ class GameManagerState(_c.Response):
     games: list[_s.GameState]
 
 
+class StartGame(_c.Response):
+    """
+    Represents the start game event
+    """
+
+    gid: str
+
+
 class GameResults(_c.Response):
     """
     Represents the results of a game

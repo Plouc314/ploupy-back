@@ -25,7 +25,7 @@ class Job:
 
         async def job(*args, **kwargs):
             async for data in self.behaviour(*args, **sup_kwargs | kwargs):
-                await sio.emit(self.event, data.dict(), to=self.jb.gid)
+                await sio.emit(self.event, data.json(), to=self.jb.gid)
 
         return job
 

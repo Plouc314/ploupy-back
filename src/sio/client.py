@@ -1,10 +1,16 @@
-from pydantic import BaseModel
+import os
 import aiohttp
+from dotenv import load_dotenv
+from pydantic import BaseModel
 
-from src.models import core
+from src.models import core as _c, sio as _s
 from src.models.api import args, responses
 
 from src.core import FLAG_DEPLOY
+
+
+if not FLAG_DEPLOY:
+    load_dotenv()
 
 
 class Client:
@@ -14,12 +20,14 @@ class Client:
     URL_DEPLOY = "https://ploupy.herokuapp.com/api/"
     URL = URL_DEPLOY if FLAG_DEPLOY else URL_DEV
 
+    SIO_TOKEN = os.environ["SIO_TOKEN"]
+
     def __init__(self):
 
         # wait to create session instance inside a async func
         # https://stackoverflow.com/questions/52232177/runtimeerror-timeout-context-manager-should-be-used-inside-a-task
         self.session: aiohttp.ClientSession = None
-        self._game_modes: dict[str, core.GameMode] = {}
+        self._game_modes: dict[str, _c.GameMode] = {}
 
     async def get(self, endpoint: str, **kwargs) -> dict | None:
         """
@@ -48,6 +56,9 @@ class Client:
     async def post(self, endpoint: str, data: BaseModel | dict) -> dict | None:
         """
         Send a POST requests to the api
+
+        Note: doesn't convert BaseModel data using `json()` but rather `dict()`
+            thus it can not handle `datetime` attributes
         """
         if self.session is None:
             self.session = aiohttp.ClientSession()
@@ -63,12 +74,29 @@ class Client:
                     return None
                 data = await response.json()
         except aiohttp.ClientError as e:
+            print("WARNING POST", e)
             return None
 
         if not data.get("success", False):
             return None
 
         return data
+
+    async def get_user_auth(self, jwt: str) -> responses.UserAuth | None:
+        '''
+        Return the uid corresponding to the jwt, if valid
+        '''
+        response = await self.get("user-auth", jwt=jwt)
+        if response is None:
+            return None
+        return responses.UserAuth(**response)
+
+    async def post_user_online(self, user: _s.User) -> None:
+        """
+        Ping api on user online status
+        """
+        data = args.UserOnline(jwt=user.jwt)
+        response = await self.post("user-online", data)
 
     async def get_user_data(self, uid: str) -> responses.UserData | None:
         """
@@ -81,7 +109,7 @@ class Client:
 
     async def get_game_mode(
         self, id: str | None = None, all: bool | None = None
-    ) -> core.GameMode | list[core.GameMode] | None:
+    ) -> _c.GameMode | list[_c.GameMode] | None:
         """
         Return the game mode with the given id
         or all the game modes (`all=True`)
@@ -106,13 +134,19 @@ class Client:
         return response.game_modes[0]
 
     async def post_game_result(
-        self, data: args.GameResults
+        self, gmid: str, ranking: list[str]
     ) -> responses.GameResults | None:
         """
         Post game results on the api
 
         Return api response
         """
+        data = args.GameResults(
+            siotk=self.SIO_TOKEN,
+            gmid=gmid,
+            ranking=ranking,
+        )
+
         response = await self.post("game-results", data)
         if response is None:
             return None

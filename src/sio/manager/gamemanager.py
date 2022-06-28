@@ -26,8 +26,28 @@ class GameManager(Manager):
             gid=game.gid,
             active=active,
             gmid=game.mode.id,
-            users=[user.user for user in game.users],
+            users=[player.user for player in game.players],
         )
+
+    def _is_pers(self, perss: list[_s.Person], pers: _s.Person) -> bool:
+        """
+        Return if the `pers` is in the list of `perss`,
+        based on their sids
+        """
+        for p in perss:
+            if p.sid == pers.sid:
+                return True
+        return False
+
+    def _is_user(self, users: list[_s.User], user: _s.User) -> bool:
+        """
+        Return if the `user` is in the list of `users`,
+        based on their uids
+        """
+        for u in users:
+            if u.user.uid == user.user.uid:
+                return True
+        return False
 
     def get_game(
         self, gid: str | None = None, user: core.User | None = None
@@ -53,7 +73,9 @@ class GameManager(Manager):
         Build and add a new sio.Game instance from the given game
         Return the sio.Game
         """
-        game_state = _s.Game(gid=gid, mode=mode, game=game, users=users)
+        game_state = _s.Game(
+            gid=gid, mode=mode, game=game, players=users, spectators=[]
+        )
         self._games[gid] = game_state
         return game_state
 
@@ -62,14 +84,39 @@ class GameManager(Manager):
         Pass
         """
 
+    def link_visitor_to_game(self, gs: _s.Game, visitor: _s.Visitor):
+        """
+        Link a visitor to a game, as a spectator
+
+        - Make visitor enters the game room
+        - Set visitor `gid` attribute
+        - If not socket-io visitor in sio.Game spectators, add it
+        """
+        # link as spectator
+        if not self._is_pers(gs.spectators, visitor):
+            gs.spectators.append(visitor)
+
+        visitor.gid = gs.gid
+        sio.enter_room(visitor.sid, room=gs.gid)
+
     def link_user_to_game(self, gs: _s.Game, user: _s.User):
         """
+        Link a user to a game, the user may be a player of the game
+        or not (a spectator)
+
         - Make user enters the game room
         - Set user `gid` attribute
         - If not socket-io user in sio.Game, add it
         """
-        if not user in gs.users:
-            gs.users.append(user)
+        if gs.game.get_player(user.user.username) is not None:
+            # link player
+            if not self._is_user(gs.players, user):
+                gs.players.append(user)
+        else:
+            # link spectator
+            if not self._is_user(gs.spectators, user):
+                gs.spectators.append(user)
+
         user.gid = gs.gid
         sio.enter_room(user.sid, room=gs.gid)
 
@@ -98,14 +145,14 @@ class GameManager(Manager):
             self.link_user_to_game(gs, user)
 
         # broadcast start game event
-        await sio.emit("start_game", game.model.dict(), to=gs.gid)
+        await sio.emit(
+            "start_game", _s.responses.StartGame(gid=gs.gid).json(), to=gs.gid
+        )
 
         # broadcast game state
         await sio.emit(
             "man_game_state",
-            _s.responses.GameManagerState(
-                games=[self._get_game_state(gs)]
-            ).dict(),
+            _s.responses.GameManagerState(games=[self._get_game_state(gs)]).json(),
         )
 
     async def end_game(self, gid: str, results: _g.GameResult, aborted: bool):
@@ -128,9 +175,7 @@ class GameManager(Manager):
         if not aborted:
             # notify api of game results
             response = await client.post_game_result(
-                _a.args.GameResults(
-                    gmid=gs.mode.id, ranking=[user.uid for user in results.ranking]
-                )
+                gmid=gs.mode.id, ranking=[user.uid for user in results.ranking]
             )
             if response is not None:
                 mmrs = response.mmrs
@@ -145,44 +190,54 @@ class GameManager(Manager):
         )
 
         # broadcast overall response
-        await sio.emit("game_result", response.dict(), to=gid)
+        await sio.emit("game_result", response.json(), to=gid)
 
         # remove game from src.games
         self._games.pop(gid, None)
 
         # leave room
-        for user in gs.users:
+        for user in gs.players:
             user.gid = None
             sio.leave_room(user.sid, room=gid)
+        for pers in gs.spectators:
+            pers.gid = None
+            sio.leave_room(pers.sid, room=gid)
 
         # broadcast game state
         await sio.emit(
             "man_game_state",
             _s.responses.GameManagerState(
                 games=[self._get_game_state(gs, active=False)]
-            ).dict(),
+            ).json(),
         )
 
-    async def disconnect(self, user: _s.User):
+    async def disconnect(self, pers: _s.Person):
         """
-        Disconnect the sio.User from the game
+        Disconnect the sio.Person from the game
         NOTE: do NOT RESIGN the game for the user
 
         In case nobody is connected to the game anymore,
         end the game
         """
-        game = self.get_game(gid=user.gid)
-        if game is None:
+
+        gs = self.get_game(gid=pers.gid)
+        if gs is None:
             return
 
-        # remove user from src.game users (NOTE: references mismatch so use sid)
-        for u in game.users:
-            if u.sid == user.sid:
-                game.users.remove(u)
+        # NOTE: references mismatch so use sid
+        # remove players user
+        for u in gs.players:
+            if u.sid == pers.sid:
+                gs.players.remove(u)
+                break
+        # remove spectator user
+        for p in gs.spectators:
+            if p.sid == pers.sid:
+                gs.spectators.remove(p)
                 break
 
-        if len(game.users) == 0:
-            game.game.end_game(aborted=True)
+        if len(gs.players) == 0 and len(gs.spectators) == 0:
+            gs.game.end_game(aborted=True)
 
     @property
     def state(self) -> _s.responses.GameManagerState:
