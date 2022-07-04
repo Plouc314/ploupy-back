@@ -1,3 +1,4 @@
+import json
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timezone
@@ -34,27 +35,9 @@ class Firebase:
     @staticmethod
     def _get_certificate() -> dict:
         """
-        Load the firebase credentials for environment variables
+        Load the firebase credentials from environment variable
         """
-        keys = [
-            "type",
-            "project_id",
-            "private_key_id",
-            "private_key",
-            "client_email",
-            "client_id",
-            "auth_uri",
-            "token_uri",
-            "auth_provider_x509_cert_url",
-            "client_x509_cert_url",
-        ]
-        cert = {}
-
-        for key in keys:
-            value = os.environ[f"firebase_{key}".upper()]
-            cert[key] = value
-
-        return cert
+        return json.loads(os.environ["FIREBASE_CREDENTIALS"])
 
     def auth(self):
         """
