@@ -70,7 +70,7 @@ pub struct Probe<'a> {
     current_state: ProbeState,
     /// Indicates if a probe state was built in
     /// the current frame
-    is_probe_state: bool,
+    is_state: bool,
     /// Amount of time already waited during the claiming (unit: sec)
     claim_counter: f64,
 }
@@ -90,7 +90,7 @@ impl<'a> Probe<'a> {
             pos: pos,
             move_dir: Point::new(0.0, 0.0),
             current_state: ProbeState::from_id(id),
-            is_probe_state: false,
+            is_state: false,
             claim_counter: 0.0,
         }
     }
@@ -100,20 +100,20 @@ impl<'a> Probe<'a> {
     }
 
     /// Reset current state
-    /// In case is_probe_state is true
+    /// In case is_state is true
     /// create new ProbeState instance
     fn reset_state(&mut self) {
-        if self.is_probe_state {
+        if self.is_state {
             self.current_state = ProbeState::from_id(self.current_state.id.clone());
         }
-        self.is_probe_state = false
+        self.is_state = false
     }
 
     /// Return the current state
     /// AND stores that there is a probe state
-    /// (see self.is_probe_state)
+    /// (see self.is_state)
     fn get_state(&mut self) -> &mut ProbeState {
-        self.is_probe_state = true;
+        self.is_state = true;
         &mut self.current_state
     }
 
@@ -170,7 +170,7 @@ impl<'a> Probe<'a> {
     /// Claim the tile at the current pos
     /// Switch to Claim policy
     fn claim(&mut self, ctx: &mut FrameContext) {
-        ctx.map.claim_tile(self);
+        ctx.map.claim_tile(self.player, &self.get_coord());
         self.claim_counter = 0.0;
         self.policy = ProbePolicy::Claim;
     }
@@ -184,7 +184,7 @@ impl<'a> Probe<'a> {
 impl<'a> Runnable for Probe<'a> {
     type State = ProbeState;
 
-    fn run(&mut self, ctx: &mut FrameContext) -> Option<ProbeState> {
+    fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State> {
         match self.policy {
             ProbePolicy::Farm => {
                 self.update_pos(ctx);
@@ -207,9 +207,9 @@ impl<'a> Runnable for Probe<'a> {
             }
         }
 
-        // handle probe state
+        // handle state
         let mut state = None;
-        if self.is_probe_state {
+        if self.is_state {
             state = Some(self.current_state.clone());
         }
         self.reset_state();

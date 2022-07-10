@@ -41,7 +41,7 @@ pub struct GameConfig {
     factory_max_probe: u32,
 
     /// delay to wait to build a probe from the factory (sec)
-    factory_build_probe_delay: u32,
+    factory_build_probe_delay: f64,
 
     /// maximal occupation value that can be reached
     max_occupation: u32,

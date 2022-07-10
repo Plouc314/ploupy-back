@@ -170,8 +170,8 @@ impl Map {
 
     /// Claim the tile at the coordinate of the probe \
     /// Return if it could be done
-    pub fn claim_tile(&mut self, probe: &Probe) -> bool {
-        let tile = self.get_mut_tile(&probe.get_coord());
+    pub fn claim_tile(&mut self, player: &Player, coord: &Coord) -> bool {
+        let tile = self.get_mut_tile(coord);
         let tile = match tile {
             None => {
                 return false;
@@ -180,10 +180,10 @@ impl Map {
         };
         match &tile.owner_id {
             None => {
-                tile.set_owner(probe.player);
+                tile.set_owner(player);
             }
             Some(owner_id) => {
-                if owner_id == probe.player.get_id() {
+                if owner_id == player.get_id() {
                     tile.incr_occupation();
                 } else {
                     tile.decr_occupation();
