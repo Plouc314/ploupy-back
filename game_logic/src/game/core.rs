@@ -84,10 +84,6 @@ pub trait Runnable {
     fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State>;
 }
 
-pub trait Identifiable {
-    fn get_id(&self) -> &str;
-}
-
-pub fn generate_unique_id() -> String {
-    return String::from("hello");
+pub fn generate_unique_id() -> u128 {
+    return 0;
 }

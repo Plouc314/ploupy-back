@@ -1,11 +1,6 @@
-use super::{
-    core,
-    core::{Coord, Identifiable},
-    geometry,
-    player::Player,
-    probe::Probe,
-    random, GameConfig,
-};
+use std::collections::HashMap;
+
+use super::{core, core::Coord, geometry, player::Player, probe::Probe, random, GameConfig};
 
 use log::warn;
 
@@ -14,9 +9,32 @@ struct MapConfig {
     pub max_occupation: u32,
 }
 
+pub struct MapState {
+    tiles: Vec<TileState>,
+    /// store state of dead factories
+    dead_building: HashMap<u128, Vec<u128>>,
+}
+
+impl MapState {
+    pub fn new() -> Self {
+        MapState {
+            tiles: Vec::new(),
+            dead_building: HashMap::new(),
+        }
+    }
+}
+
 pub struct Map {
     config: MapConfig,
     tiles: Vec<Vec<Tile>>,
+    /// Store potential map state at this frame
+    /// used to gradually build map state during
+    /// run() functions (executed by all Runnable entities)
+    /// Should not be dealt with directly, or see `is_state`
+    current_state: MapState,
+    /// Indicates if a probe state was built in
+    /// the current frame
+    is_state: bool,
 }
 
 impl Map {
@@ -37,6 +55,8 @@ impl Map {
                 max_occupation: config.max_occupation,
             },
             tiles: tiles,
+            current_state: MapState::new(),
+            is_state: false,
         };
     }
 
@@ -56,6 +76,24 @@ impl Map {
         self.tiles
             .get_mut(coord.x as usize)?
             .get_mut(coord.y as usize)
+    }
+
+    /// Reset current state
+    /// In case is_state is true
+    /// create new MapState instance
+    fn reset_state(&mut self) {
+        if self.is_state {
+            self.current_state = MapState::new();
+        }
+        self.is_state = false
+    }
+
+    /// Return the current state
+    /// AND stores that there is a map state
+    /// (see self.is_state)
+    fn mut_state(&mut self) -> &mut MapState {
+        self.is_state = true;
+        &mut self.current_state
     }
 
     /// Return the tiles that are neighbour of the `tile` \
@@ -169,6 +207,7 @@ impl Map {
     }
 
     /// Claim the tile at the coordinate of the probe \
+    /// Store the tile state, potential building death in current state \
     /// Return if it could be done
     pub fn claim_tile(&mut self, player: &Player, coord: &Coord) -> bool {
         let tile = self.get_mut_tile(coord);
@@ -178,21 +217,41 @@ impl Map {
             }
             Some(tile) => tile,
         };
-        match &tile.owner_id {
+        let mut deaths: Option<(u128, u128)> = None;
+        match tile.owner_id {
             None => {
                 tile.set_owner(player);
             }
             Some(owner_id) => {
-                if owner_id == player.get_id() {
+                if owner_id == player.id {
                     tile.incr_occupation();
                 } else {
                     tile.decr_occupation();
                     if tile.occupation == 0 {
+                        // notify building death
+                        if let Some(building_id) = tile.building_id {
+                            deaths = Some((tile.owner_id.unwrap(), building_id));
+                        }
                         tile.owner_id = None;
+                        tile.building_id = None;
                     }
                 }
             }
         }
+        let state = TileState::from_tile(tile);
+        self.mut_state().tiles.push(state);
+
+        // add building death to current state
+        if let Some((owner, building)) = deaths {
+            if let Some(ids) = self.current_state.dead_building.get_mut(&owner) {
+                ids.push(building);
+            } else {
+                self.current_state
+                    .dead_building
+                    .insert(owner, vec![building]);
+            }
+        }
+
         true
     }
 }
@@ -201,12 +260,30 @@ struct TileConfig {
     max_occupation: u32,
 }
 
+pub struct TileState {
+    pub id: u128,
+    pub occupation: Option<u32>,
+    pub owner_id: Option<u128>,
+}
+
+impl TileState {
+    pub fn from_tile(tile: &Tile) -> Self {
+        TileState {
+            id: tile.id,
+            occupation: Some(tile.occupation),
+            owner_id: tile.owner_id,
+        }
+    }
+}
+
 pub struct Tile {
-    id: String,
+    pub id: u128,
     config: TileConfig,
     coord: Coord,
     pub occupation: u32,
-    pub owner_id: Option<String>,
+    pub owner_id: Option<u128>,
+    /// may be id of: Factory, Turret
+    pub building_id: Option<u128>,
 }
 
 impl Tile {
@@ -219,29 +296,30 @@ impl Tile {
             coord: coord,
             occupation: 0,
             owner_id: None,
+            building_id: None,
         };
     }
 
     /// Return if the tile is owned by the given player
     pub fn is_owned_by(&self, player: &Player) -> bool {
-        match &self.owner_id {
+        match self.owner_id {
             None => false,
-            Some(id) => id.as_str() == player.get_id(),
+            Some(id) => id == player.id,
         }
     }
 
     /// Return if the tile is owned someone else than `player`
     pub fn is_owned_by_opponent_of(&self, player: &Player) -> bool {
-        match &self.owner_id {
+        match self.owner_id {
             None => false,
-            Some(id) => id.as_str() != player.get_id(),
+            Some(id) => id != player.id,
         }
     }
 
     /// Set the owner of the tile
     /// Reset the occupation
     pub fn set_owner(&mut self, player: &Player) {
-        self.owner_id = Some(player.get_id().to_owned());
+        self.owner_id = Some(player.id);
         self.occupation = 1;
     }
 
@@ -257,11 +335,5 @@ impl Tile {
         if self.occupation > 0 {
             self.occupation -= 1;
         }
-    }
-}
-
-impl Identifiable for Tile {
-    fn get_id(&self) -> &str {
-        &self.id
     }
 }

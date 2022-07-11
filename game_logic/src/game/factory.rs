@@ -1,4 +1,4 @@
-use super::core::{Coord, FrameContext, Identifiable, Runnable};
+use super::core::{Coord, FrameContext, Runnable};
 use super::player::Player;
 use super::probe::{Probe, ProbeState};
 use super::{core, geometry, GameConfig};
@@ -17,13 +17,12 @@ pub enum FactoryDeathCause {
 struct FactoryConfig {
     max_probe: u32,
     build_probe_delay: f64,
-    probe_price: u32,
     probe_maintenance_costs: f64,
 }
 
 #[derive(Clone)]
 pub struct FactoryState {
-    pub id: String,
+    pub id: u128,
     /// Only specified once, when the factory dies
     pub death: Option<FactoryDeathCause>,
     pub coord: Option<Coord>,
@@ -31,16 +30,7 @@ pub struct FactoryState {
 }
 
 impl FactoryState {
-    pub fn new(factory: &Factory) -> Self {
-        FactoryState {
-            id: factory.get_id().to_string(),
-            death: None,
-            coord: None,
-            probes: Vec::new(),
-        }
-    }
-
-    pub fn from_id(id: String) -> Self {
+    pub fn from_id(id: u128) -> Self {
         FactoryState {
             id: id,
             death: None,
@@ -51,7 +41,7 @@ impl FactoryState {
 }
 
 pub struct Factory<'a> {
-    id: String,
+    pub id: u128,
     pub player: &'a Player<'a>,
     config: FactoryConfig,
     policy: FactoryPolicy,
@@ -59,9 +49,11 @@ pub struct Factory<'a> {
     probes: Vec<Probe<'a>>,
     /// step in the expansion phase
     expand_step: u32,
+    /// Amount of time already waited when producing (unit: sec)
+    produce_counter: f64,
     /// Store potential factory state at this frame
     /// used to gradually build factory state during
-    /// run() function (see get_state)
+    /// run() function (see mut_state)
     /// Should not be dealt with directly
     current_state: FactoryState,
     /// Indicates if a factory state was built in
@@ -73,18 +65,18 @@ impl<'a> Factory<'a> {
     pub fn new(player: &'a Player, config: &GameConfig, pos: Coord) -> Self {
         let id = core::generate_unique_id();
         Factory {
-            id: id.clone(),
+            id: id,
             player: player,
             config: FactoryConfig {
                 max_probe: config.factory_max_probe,
                 build_probe_delay: config.factory_build_probe_delay,
-                probe_price: config.probe_price,
                 probe_maintenance_costs: config.probe_maintenance_costs,
             },
             policy: FactoryPolicy::Expand,
             pos: pos,
             probes: Vec::new(),
             expand_step: 0,
+            produce_counter: 0.0,
             current_state: FactoryState::from_id(id),
             is_state: false,
         }
@@ -103,9 +95,19 @@ impl<'a> Factory<'a> {
     /// Return the current state
     /// AND stores that there is a factory state
     /// (see self.is_state)
-    fn get_state(&mut self) -> &mut FactoryState {
+    fn mut_state(&mut self) -> &mut FactoryState {
         self.is_state = true;
         &mut self.current_state
+    }
+
+    /// Create the probe state of a new probe
+    fn create_probe_state(&self) -> ProbeState {
+        ProbeState {
+            id: None,
+            death: None,
+            pos: Some(self.pos.as_point()),
+            target: None,
+        }
     }
 
     /// Claim tiles next to the factory
@@ -115,10 +117,37 @@ impl<'a> Factory<'a> {
         if self.expand_step == 4 {
             self.expand_step = 0;
             self.policy = FactoryPolicy::Produce;
+            return;
         }
         let coords = geometry::square(&self.pos, self.expand_step);
         for coord in coords.iter() {
             ctx.map.claim_tile(self.player, coord);
+        }
+    }
+
+    /// Wait for produce delay then produce a new probe
+    /// (by putting it in `current_state`), then repeat. \
+    /// Note: doesn't check for player money, will be done by player
+    /// when resolving states (thus there is no guarantee that the probe
+    /// will effectively be created) \
+    /// Switch to Wait policy when `max_probe` reached
+    fn produce(&mut self, ctx: &mut FrameContext) {
+        if self.probes.len() == self.config.max_probe as usize {
+            self.policy = FactoryPolicy::Wait;
+            return;
+        }
+        self.produce_counter += ctx.dt;
+        if self.produce_counter >= self.config.build_probe_delay {
+            self.produce_counter = 0.0;
+            self.current_state.probes.push(self.create_probe_state());
+            self.is_state = true;
+        }
+    }
+
+    /// Switch to Produce policy when having less than `max_probe`
+    fn wait(&mut self, ctx: &mut FrameContext) {
+        if self.probes.len() < self.config.max_probe as usize {
+            self.policy = FactoryPolicy::Produce;
         }
     }
 }
@@ -131,13 +160,17 @@ impl<'a> Runnable for Factory<'a> {
             FactoryPolicy::Expand => {
                 self.expand(ctx);
             }
-            FactoryPolicy::Produce => {}
-            FactoryPolicy::Wait => {}
+            FactoryPolicy::Produce => {
+                self.produce(ctx);
+            }
+            FactoryPolicy::Wait => {
+                self.wait(ctx);
+            }
         }
 
         for probe in self.probes.iter_mut() {
             if let Some(state) = probe.run(ctx) {
-                // manual call to get_state() cause of borrowing-stuff
+                // manual call to mut_state() cause of borrowing-stuff
                 self.current_state.probes.push(state);
                 self.is_state = true;
             }
@@ -150,11 +183,5 @@ impl<'a> Runnable for Factory<'a> {
         }
         self.reset_state();
         state
-    }
-}
-
-impl Identifiable for Factory<'_> {
-    fn get_id(&self) -> &str {
-        &self.id
     }
 }

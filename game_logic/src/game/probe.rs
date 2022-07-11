@@ -1,9 +1,9 @@
 use log::warn;
 
-use super::core::{self, FrameContext, Identifiable, Runnable};
+use super::core::{self, FrameContext, Runnable};
 use super::core::{Coord, Point};
 use super::player::Player;
-use super::GameConfig;
+use super::{geometry, GameConfig};
 
 #[derive(Debug)]
 pub enum ProbePolicy {
@@ -25,7 +25,8 @@ struct ProbeConfig {
 
 #[derive(Clone)]
 pub struct ProbeState {
-    pub id: String,
+    /// If id is None -> the probe has just been created
+    pub id: Option<u128>,
     /// Only specified once, when the probe dies
     pub death: Option<ProbeDeathCause>,
     pub pos: Option<Point>,
@@ -35,16 +36,16 @@ pub struct ProbeState {
 impl ProbeState {
     pub fn new(probe: &Probe) -> Self {
         ProbeState {
-            id: probe.get_id().to_string(),
+            id: Some(probe.id),
             death: None,
             pos: None,
             target: None,
         }
     }
 
-    pub fn from_id(id: String) -> Self {
+    pub fn from_id(id: u128) -> Self {
         ProbeState {
-            id: id,
+            id: Some(id),
             death: None,
             pos: None,
             target: None,
@@ -53,7 +54,7 @@ impl ProbeState {
 }
 
 pub struct Probe<'a> {
-    id: String,
+    pub id: u128,
     pub player: &'a Player<'a>,
     config: ProbeConfig,
     policy: ProbePolicy,
@@ -65,7 +66,7 @@ pub struct Probe<'a> {
     move_dir: Point,
     /// Store potential probe state at this frame
     /// used to gradually build probe state during
-    /// run() function (see get_state)
+    /// run() function (see mut_state)
     /// Should not be dealt with directly
     current_state: ProbeState,
     /// Indicates if a probe state was built in
@@ -79,7 +80,7 @@ impl<'a> Probe<'a> {
     pub fn new(player: &'a Player, config: &GameConfig, pos: Point) -> Self {
         let id = core::generate_unique_id();
         Probe {
-            id: id.clone(),
+            id: id,
             player: player,
             config: ProbeConfig {
                 speed: config.probe_speed,
@@ -104,7 +105,7 @@ impl<'a> Probe<'a> {
     /// create new ProbeState instance
     fn reset_state(&mut self) {
         if self.is_state {
-            self.current_state = ProbeState::from_id(self.current_state.id.clone());
+            self.current_state = ProbeState::from_id(self.current_state.id.unwrap());
         }
         self.is_state = false
     }
@@ -112,7 +113,7 @@ impl<'a> Probe<'a> {
     /// Return the current state
     /// AND stores that there is a probe state
     /// (see self.is_state)
-    fn get_state(&mut self) -> &mut ProbeState {
+    fn mut_state(&mut self) -> &mut ProbeState {
         self.is_state = true;
         &mut self.current_state
     }
@@ -137,7 +138,7 @@ impl<'a> Probe<'a> {
             let target = target.as_point();
             // in case the target has changed -> update current state
             if target != self.target {
-                self.get_state().target = Some(target.as_coord());
+                self.mut_state().target = Some(target.as_coord());
             }
             self.set_target(target);
         }
@@ -175,9 +176,24 @@ impl<'a> Probe<'a> {
         self.policy = ProbePolicy::Claim;
     }
 
+    /// Claims neighbours tiles twice \
     /// Notify death in probe state
-    fn explode(&mut self) {
-        self.get_state().death = Some(ProbeDeathCause::Exploded);
+    fn explode(&mut self, ctx: &mut FrameContext) {
+        self.mut_state().death = Some(ProbeDeathCause::Exploded);
+        let coords = geometry::square(&self.get_coord(), 1);
+        for coord in coords.iter() {
+            ctx.map.claim_tile(self.player, coord);
+            ctx.map.claim_tile(self.player, coord);
+        }
+    }
+
+    /// Wait for `claim_delay` then switch to Farm policy
+    fn wait_claim(&mut self, ctx: &mut FrameContext) {
+        self.claim_counter += ctx.dt;
+        if self.claim_counter >= self.config.claim_delay {
+            self.policy = ProbePolicy::Farm;
+            self.select_next_target(ctx);
+        }
     }
 }
 
@@ -195,15 +211,11 @@ impl<'a> Runnable for Probe<'a> {
             ProbePolicy::Attack => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.explode();
+                    self.explode(ctx);
                 }
             }
             ProbePolicy::Claim => {
-                self.claim_counter += ctx.dt;
-                if self.claim_counter >= self.config.claim_delay {
-                    self.policy = ProbePolicy::Farm;
-                    self.select_next_target(ctx);
-                }
+                self.wait_claim(ctx);
             }
         }
 
@@ -214,11 +226,5 @@ impl<'a> Runnable for Probe<'a> {
         }
         self.reset_state();
         state
-    }
-}
-
-impl<'a> Identifiable for Probe<'a> {
-    fn get_id(&self) -> &str {
-        &self.id
     }
 }
