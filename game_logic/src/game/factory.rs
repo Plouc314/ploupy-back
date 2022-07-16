@@ -1,3 +1,5 @@
+use std::rc::{Rc, Weak};
+
 use super::core::{Coord, FrameContext, Runnable};
 use super::player::Player;
 use super::probe::{Probe, ProbeState};
@@ -40,13 +42,13 @@ impl FactoryState {
     }
 }
 
-pub struct Factory<'a> {
+pub struct Factory {
     pub id: u128,
-    pub player: &'a Player<'a>,
+    pub player: Weak<Player>,
     config: FactoryConfig,
     policy: FactoryPolicy,
     pub pos: Coord,
-    probes: Vec<Probe<'a>>,
+    probes: Vec<Probe>,
     /// step in the expansion phase
     expand_step: u32,
     /// Amount of time already waited when producing (unit: sec)
@@ -61,12 +63,12 @@ pub struct Factory<'a> {
     is_state: bool,
 }
 
-impl<'a> Factory<'a> {
-    pub fn new(player: &'a Player, config: &GameConfig, pos: Coord) -> Self {
+impl Factory {
+    pub fn new(player: &Rc<Player>, config: &GameConfig, pos: Coord) -> Self {
         let id = core::generate_unique_id();
         Factory {
             id: id,
-            player: player,
+            player: Rc::downgrade(player),
             config: FactoryConfig {
                 max_probe: config.factory_max_probe,
                 build_probe_delay: config.factory_build_probe_delay,
@@ -82,12 +84,16 @@ impl<'a> Factory<'a> {
         }
     }
 
+    fn rc_player(&self) -> Rc<Player> {
+        self.player.upgrade().unwrap()
+    }
+
     /// Reset current state
     /// In case is_state is true
     /// create new FactoryState instance
     fn reset_state(&mut self) {
         if self.is_state {
-            self.current_state = FactoryState::from_id(self.current_state.id.clone());
+            self.current_state = FactoryState::from_id(self.id);
         }
         self.is_state = false
     }
@@ -98,6 +104,10 @@ impl<'a> Factory<'a> {
     fn mut_state(&mut self) -> &mut FactoryState {
         self.is_state = true;
         &mut self.current_state
+    }
+
+    pub fn attach_probe(&mut self, probe: Probe) {
+        self.probes.push(probe);
     }
 
     /// Create the probe state of a new probe
@@ -121,7 +131,7 @@ impl<'a> Factory<'a> {
         }
         let coords = geometry::square(&self.pos, self.expand_step);
         for coord in coords.iter() {
-            ctx.map.claim_tile(self.player, coord);
+            ctx.map.claim_tile(self.rc_player().as_ref(), coord);
         }
     }
 
@@ -152,7 +162,7 @@ impl<'a> Factory<'a> {
     }
 }
 
-impl<'a> Runnable for Factory<'a> {
+impl Runnable for Factory {
     type State = FactoryState;
 
     fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State> {

@@ -1,3 +1,5 @@
+use std::rc::{Rc, Weak};
+
 use log::warn;
 
 use super::core::{self, FrameContext, Runnable};
@@ -53,9 +55,9 @@ impl ProbeState {
     }
 }
 
-pub struct Probe<'a> {
+pub struct Probe {
     pub id: u128,
-    pub player: &'a Player<'a>,
+    pub player: Weak<Player>,
     config: ProbeConfig,
     policy: ProbePolicy,
     pub pos: Point,
@@ -76,12 +78,16 @@ pub struct Probe<'a> {
     claim_counter: f64,
 }
 
-impl<'a> Probe<'a> {
-    pub fn new(player: &'a Player, config: &GameConfig, pos: Point) -> Self {
+impl Probe {
+    /// Create a new Probe instance \
+    /// By default, the target is the same as the position (`pos`)
+    /// use, `set_target()` to specify a target, else it will be set
+    /// on next frame
+    pub fn new(player: &Rc<Player>, config: &GameConfig, pos: Point) -> Probe {
         let id = core::generate_unique_id();
         Probe {
             id: id,
-            player: player,
+            player: Rc::downgrade(player),
             config: ProbeConfig {
                 speed: config.probe_speed,
                 claim_delay: config.probe_claim_delay,
@@ -100,12 +106,16 @@ impl<'a> Probe<'a> {
         self.pos.as_coord()
     }
 
+    fn rc_player(&self) -> Rc<Player> {
+        self.player.upgrade().unwrap()
+    }
+
     /// Reset current state
     /// In case is_state is true
     /// create new ProbeState instance
     fn reset_state(&mut self) {
         if self.is_state {
-            self.current_state = ProbeState::from_id(self.current_state.id.unwrap());
+            self.current_state = ProbeState::from_id(self.id);
         }
         self.is_state = false
     }
@@ -124,10 +134,14 @@ impl<'a> Probe<'a> {
         let target;
         match &self.policy {
             ProbePolicy::Farm => {
-                target = ctx.map.get_probe_farm_target(self.player, &self);
+                target = ctx
+                    .map
+                    .get_probe_farm_target(self.rc_player().as_ref(), &self);
             }
             ProbePolicy::Attack => {
-                target = ctx.map.get_probe_attack_target(self.player, &self);
+                target = ctx
+                    .map
+                    .get_probe_attack_target(self.rc_player().as_ref(), &self);
             }
             _ => {
                 warn!("Unexpected probe policy: {:?}", self.policy);
@@ -145,8 +159,9 @@ impl<'a> Probe<'a> {
     }
 
     /// Set a new target,
-    /// Compute new move direction
-    fn set_target(&mut self, target: Point) {
+    /// Compute new move direction \
+    /// Note: don't update current state
+    pub fn set_target(&mut self, target: Point) {
         self.target = target;
         self.move_dir =
             Point::new(self.target.x - self.pos.x, self.target.y - self.pos.y).normalize();
@@ -171,7 +186,8 @@ impl<'a> Probe<'a> {
     /// Claim the tile at the current pos
     /// Switch to Claim policy
     fn claim(&mut self, ctx: &mut FrameContext) {
-        ctx.map.claim_tile(self.player, &self.get_coord());
+        ctx.map
+            .claim_tile(self.rc_player().as_ref(), &self.get_coord());
         self.claim_counter = 0.0;
         self.policy = ProbePolicy::Claim;
     }
@@ -182,8 +198,8 @@ impl<'a> Probe<'a> {
         self.mut_state().death = Some(ProbeDeathCause::Exploded);
         let coords = geometry::square(&self.get_coord(), 1);
         for coord in coords.iter() {
-            ctx.map.claim_tile(self.player, coord);
-            ctx.map.claim_tile(self.player, coord);
+            ctx.map.claim_tile(self.rc_player().as_ref(), coord);
+            ctx.map.claim_tile(self.rc_player().as_ref(), coord);
         }
     }
 
@@ -197,7 +213,7 @@ impl<'a> Probe<'a> {
     }
 }
 
-impl<'a> Runnable for Probe<'a> {
+impl Runnable for Probe {
     type State = ProbeState;
 
     fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State> {

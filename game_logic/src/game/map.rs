@@ -168,7 +168,7 @@ impl Map {
         };
 
         // then look next to the factories
-        for factory in player.factories.iter() {
+        for (_, factory) in player.factories.iter() {
             if let Some(target) = self.get_close_probe_farm_target(player, &factory.pos) {
                 return Some(target);
             }

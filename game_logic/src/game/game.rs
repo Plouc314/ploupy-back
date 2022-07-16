@@ -1,12 +1,12 @@
 use super::*;
 
-pub struct Game<'a> {
+pub struct Game {
     config: GameConfig,
     map: Map,
-    players: Vec<Player<'a>>,
+    players: Vec<Player>,
 }
 
-impl<'a> Game<'a> {
+impl Game {
     pub fn new(config: GameConfig) -> Self {
         let map = Map::new(&config);
         return Game {
