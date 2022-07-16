@@ -79,11 +79,6 @@ pub struct FrameContext<'a> {
     pub map: &'a mut Map,
 }
 
-pub trait Runnable {
-    type State;
-    fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State>;
-}
-
 pub fn generate_unique_id() -> u128 {
     return 0;
 }

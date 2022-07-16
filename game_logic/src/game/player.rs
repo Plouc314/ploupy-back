@@ -4,7 +4,7 @@ use super::{
     core,
     factory::{Factory, FactoryState},
     probe::{Probe, ProbeState},
-    FrameContext, GameConfig, Runnable,
+    FrameContext, GameConfig,
 };
 
 pub struct PlayerConfig {
@@ -32,7 +32,7 @@ pub struct Player {
     pub id: u128,
     config: PlayerConfig,
     money: f64,
-    pub factories: HashMap<u128, Factory>,
+    pub factories: Vec<Factory>,
     /// Store potential player state at this frame
     /// used to gradually build player state during
     /// run() function (see mut_state)
@@ -42,6 +42,7 @@ pub struct Player {
     /// the current frame
     is_state: bool,
 }
+
 impl Player {
     pub fn new(config: &GameConfig) -> Self {
         let id = core::generate_unique_id();
@@ -54,7 +55,7 @@ impl Player {
                 probe_price: config.probe_price,
             },
             money: 0.0,
-            factories: HashMap::new(),
+            factories: Vec::new(),
             current_state: PlayerState::from_id(id),
             is_state: false,
         }
@@ -79,74 +80,48 @@ impl Player {
     }
 
     /// create a new probe
-    fn create_probe(&self, state: &mut ProbeState, ctx: &mut FrameContext) -> Option<Probe> {
-        // if let Some(pos) = &state.pos {
-        //     let mut probe = Probe::new(self, ctx.config, pos.clone());
-        //     if let Some(target) = ctx.map.get_probe_farm_target(self, &probe) {
-        //         probe.set_target(target.as_point());
-        //         state.target = Some(target);
-        //     }
-        //     return Some(probe);
-        // }
-        None
-    }
-}
-
-impl Runnable for Player {
-    type State = ();
-
-    fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State> {
-        let mut probe_to_creates: HashMap<u128, Vec<ProbeState>> = HashMap::new();
-        let mut probe_states: HashMap<u128, Vec<ProbeState>> = HashMap::new();
-        for (_, factory) in self.factories.iter_mut() {
-            let state = factory.run(ctx);
-            if let Some(state) = state {
-                self.is_state = true;
-                for probe_state in state.probes {
-                    match probe_state.id {
-                        None => {
-                            if self.money <= self.config.probe_price {
-                                self.money -= self.config.probe_price;
-                                match probe_to_creates.get_mut(&factory.id) {
-                                    None => {
-                                        probe_to_creates.insert(factory.id, vec![probe_state]);
-                                    }
-                                    Some(states) => {
-                                        states.push(probe_state);
-                                    }
-                                };
-                            }
-                        }
-                        Some(_) => {
-                            match probe_states.get_mut(&factory.id) {
-                                None => {
-                                    probe_states.insert(factory.id, vec![probe_state]);
-                                }
-                                Some(states) => {
-                                    states.push(probe_state);
-                                }
-                            };
-                        }
-                    }
+    fn create_probe(&mut self, state: &mut ProbeState, ctx: &mut FrameContext) -> Option<Probe> {
+        if self.money <= self.config.probe_price {
+            self.money -= self.config.probe_price;
+            if let Some(pos) = &state.pos {
+                let mut probe = Probe::new(ctx.config, pos.clone());
+                if let Some(target) = ctx.map.get_probe_farm_target(self, &probe) {
+                    probe.set_target(target.as_point());
+                    state.target = Some(target);
                 }
+                return Some(probe);
             }
         }
-        for (factory_id, mut states) in probe_to_creates {
-            for state in states.iter_mut() {
-                if let Some(probe) = self.create_probe(state, ctx) {
-                    if let Some(factory) = self.factories.get_mut(&factory_id) {
-                        factory.attach_probe(probe);
+        None
+    }
+
+    /// run function
+    pub fn run(&mut self, ctx: &mut FrameContext) -> Option<PlayerState> {
+        let mut factories: Vec<Factory> = self.factories.drain(..).collect();
+        let mut dead_factory_idxs = Vec::new();
+        for (i, factory) in factories.iter_mut().enumerate() {
+            if let Some(mut state) = factory.run(&self, ctx) {
+                if state.death.is_some() {
+                    factory.die();
+                    dead_factory_idxs.push(i);
+                }
+
+                for probe_state in state.probes.iter_mut() {
+                    if probe_state.id.is_none() {
+                        if let Some(probe) = self.create_probe(probe_state, ctx) {
+                            factory.attach_probe(probe);
+                        }
                     }
                 }
+
+                self.is_state = true;
+                self.current_state.factories.push(state);
             }
-            match probe_states.get_mut(&factory_id) {
-                None => {
-                    probe_states.insert(factory_id, states);
-                }
-                Some(existing_states) => {
-                    existing_states.extend(states);
-                }
-            };
+        }
+
+        // remove all death probes
+        for idx in dead_factory_idxs {
+            self.factories.remove(idx);
         }
 
         None

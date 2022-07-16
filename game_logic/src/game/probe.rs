@@ -2,7 +2,7 @@ use std::rc::{Rc, Weak};
 
 use log::warn;
 
-use super::core::{self, FrameContext, Runnable};
+use super::core::{self, FrameContext};
 use super::core::{Coord, Point};
 use super::player::Player;
 use super::{geometry, GameConfig};
@@ -18,6 +18,7 @@ pub enum ProbePolicy {
 pub enum ProbeDeathCause {
     Exploded,
     Shot,
+    Scrapped,
 }
 
 struct ProbeConfig {
@@ -57,7 +58,6 @@ impl ProbeState {
 
 pub struct Probe {
     pub id: u128,
-    pub player: Weak<Player>,
     config: ProbeConfig,
     policy: ProbePolicy,
     pub pos: Point,
@@ -83,11 +83,10 @@ impl Probe {
     /// By default, the target is the same as the position (`pos`)
     /// use, `set_target()` to specify a target, else it will be set
     /// on next frame
-    pub fn new(player: &Rc<Player>, config: &GameConfig, pos: Point) -> Probe {
+    pub fn new(config: &GameConfig, pos: Point) -> Probe {
         let id = core::generate_unique_id();
         Probe {
             id: id,
-            player: Rc::downgrade(player),
             config: ProbeConfig {
                 speed: config.probe_speed,
                 claim_delay: config.probe_claim_delay,
@@ -104,10 +103,6 @@ impl Probe {
 
     pub fn get_coord(&self) -> Coord {
         self.pos.as_coord()
-    }
-
-    fn rc_player(&self) -> Rc<Player> {
-        self.player.upgrade().unwrap()
     }
 
     /// Reset current state
@@ -130,18 +125,14 @@ impl Probe {
 
     /// Select a new target and (if found) set the new target
     /// and update the current state
-    fn select_next_target(&mut self, ctx: &mut FrameContext) {
+    fn select_next_target(&mut self, player: &Player, ctx: &mut FrameContext) {
         let target;
         match &self.policy {
             ProbePolicy::Farm => {
-                target = ctx
-                    .map
-                    .get_probe_farm_target(self.rc_player().as_ref(), &self);
+                target = ctx.map.get_probe_farm_target(player, &self);
             }
             ProbePolicy::Attack => {
-                target = ctx
-                    .map
-                    .get_probe_attack_target(self.rc_player().as_ref(), &self);
+                target = ctx.map.get_probe_attack_target(player, &self);
             }
             _ => {
                 warn!("Unexpected probe policy: {:?}", self.policy);
@@ -185,53 +176,49 @@ impl Probe {
 
     /// Claim the tile at the current pos
     /// Switch to Claim policy
-    fn claim(&mut self, ctx: &mut FrameContext) {
-        ctx.map
-            .claim_tile(self.rc_player().as_ref(), &self.get_coord());
+    fn claim(&mut self, player: &Player, ctx: &mut FrameContext) {
+        ctx.map.claim_tile(player, &self.get_coord());
         self.claim_counter = 0.0;
         self.policy = ProbePolicy::Claim;
     }
 
     /// Claims neighbours tiles twice \
     /// Notify death in probe state
-    fn explode(&mut self, ctx: &mut FrameContext) {
+    fn explode(&mut self, player: &Player, ctx: &mut FrameContext) {
         self.mut_state().death = Some(ProbeDeathCause::Exploded);
         let coords = geometry::square(&self.get_coord(), 1);
         for coord in coords.iter() {
-            ctx.map.claim_tile(self.rc_player().as_ref(), coord);
-            ctx.map.claim_tile(self.rc_player().as_ref(), coord);
+            ctx.map.claim_tile(player, coord);
+            ctx.map.claim_tile(player, coord);
         }
     }
 
     /// Wait for `claim_delay` then switch to Farm policy
-    fn wait_claim(&mut self, ctx: &mut FrameContext) {
+    fn wait_claim(&mut self, player: &Player, ctx: &mut FrameContext) {
         self.claim_counter += ctx.dt;
         if self.claim_counter >= self.config.claim_delay {
             self.policy = ProbePolicy::Farm;
-            self.select_next_target(ctx);
+            self.select_next_target(player, ctx);
         }
     }
-}
 
-impl Runnable for Probe {
-    type State = ProbeState;
-
-    fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State> {
+    /// run function
+    pub fn run(&mut self, player: &Player, ctx: &mut FrameContext) -> Option<ProbeState> {
         match self.policy {
             ProbePolicy::Farm => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.claim(ctx);
+                    self.claim(player, ctx);
                 }
             }
             ProbePolicy::Attack => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.explode(ctx);
+                    self.explode(player, ctx);
                 }
             }
             ProbePolicy::Claim => {
-                self.wait_claim(ctx);
+                self.wait_claim(player, ctx);
             }
         }
 

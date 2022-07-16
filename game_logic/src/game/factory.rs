@@ -1,8 +1,10 @@
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use super::core::{Coord, FrameContext, Runnable};
+use super::core::{Coord, FrameContext};
 use super::player::Player;
-use super::probe::{Probe, ProbeState};
+use super::probe::{Probe, ProbeDeathCause, ProbeState};
 use super::{core, geometry, GameConfig};
 
 pub enum FactoryPolicy {
@@ -44,7 +46,6 @@ impl FactoryState {
 
 pub struct Factory {
     pub id: u128,
-    pub player: Weak<Player>,
     config: FactoryConfig,
     policy: FactoryPolicy,
     pub pos: Coord,
@@ -64,11 +65,10 @@ pub struct Factory {
 }
 
 impl Factory {
-    pub fn new(player: &Rc<Player>, config: &GameConfig, pos: Coord) -> Self {
+    pub fn new(config: &GameConfig, pos: Coord) -> Self {
         let id = core::generate_unique_id();
         Factory {
             id: id,
-            player: Rc::downgrade(player),
             config: FactoryConfig {
                 max_probe: config.factory_max_probe,
                 build_probe_delay: config.factory_build_probe_delay,
@@ -82,10 +82,6 @@ impl Factory {
             current_state: FactoryState::from_id(id),
             is_state: false,
         }
-    }
-
-    fn rc_player(&self) -> Rc<Player> {
-        self.player.upgrade().unwrap()
     }
 
     /// Reset current state
@@ -106,6 +102,7 @@ impl Factory {
         &mut self.current_state
     }
 
+    /// Attach a new probe to the factory
     pub fn attach_probe(&mut self, probe: Probe) {
         self.probes.push(probe);
     }
@@ -120,9 +117,21 @@ impl Factory {
         }
     }
 
+    /// Kill all factory's probes \
+    /// Return their states (with death cause)
+    pub fn die(&mut self) -> Vec<ProbeState> {
+        let mut probe_states = Vec::with_capacity(self.probes.len());
+        for probe in self.probes.iter_mut() {
+            let mut state = ProbeState::from_id(probe.id);
+            state.death = Some(ProbeDeathCause::Scrapped);
+            probe_states.push(state);
+        }
+        probe_states
+    }
+
     /// Claim tiles next to the factory
     /// When done, switch to Produce policy
-    fn expand(&mut self, ctx: &mut FrameContext) {
+    fn expand(&mut self, player: &Player, ctx: &mut FrameContext) {
         self.expand_step += 1;
         if self.expand_step == 4 {
             self.expand_step = 0;
@@ -131,7 +140,7 @@ impl Factory {
         }
         let coords = geometry::square(&self.pos, self.expand_step);
         for coord in coords.iter() {
-            ctx.map.claim_tile(self.rc_player().as_ref(), coord);
+            ctx.map.claim_tile(player, coord);
         }
     }
 
@@ -160,15 +169,12 @@ impl Factory {
             self.policy = FactoryPolicy::Produce;
         }
     }
-}
 
-impl Runnable for Factory {
-    type State = FactoryState;
-
-    fn run(&mut self, ctx: &mut FrameContext) -> Option<Self::State> {
+    /// run function
+    pub fn run(&mut self, player: &Player, ctx: &mut FrameContext) -> Option<FactoryState> {
         match self.policy {
             FactoryPolicy::Expand => {
-                self.expand(ctx);
+                self.expand(player, ctx);
             }
             FactoryPolicy::Produce => {
                 self.produce(ctx);
@@ -178,12 +184,23 @@ impl Runnable for Factory {
             }
         }
 
-        for probe in self.probes.iter_mut() {
-            if let Some(state) = probe.run(ctx) {
+        let mut dead_probe_idxs = Vec::new();
+        for (i, probe) in self.probes.iter_mut().enumerate() {
+            if let Some(state) = probe.run(player, ctx) {
+                // remove death probes (for any death cause)
+                if state.death.is_some() {
+                    dead_probe_idxs.push(i);
+                }
+
                 // manual call to mut_state() cause of borrowing-stuff
                 self.current_state.probes.push(state);
                 self.is_state = true;
             }
+        }
+
+        // remove all death probes
+        for idx in dead_probe_idxs {
+            self.probes.remove(idx);
         }
 
         // handle state
