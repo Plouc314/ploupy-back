@@ -80,5 +80,5 @@ pub struct FrameContext<'a> {
 }
 
 pub fn generate_unique_id() -> u128 {
-    return 0;
+    return uuid::Uuid::new_v4().as_u128();
 }

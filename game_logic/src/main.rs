@@ -42,10 +42,10 @@ fn ref_stuff() {
 
 fn test_game() {
     let config = GameConfig {
-        dim: Coord { x: 0, y: 0 },
-        n_player: 0,
-        initial_money: 0.0,
-        initial_n_probes: 0,
+        dim: Coord { x: 10, y: 10 },
+        n_player: 3,
+        initial_money: 20.0,
+        initial_n_probes: 3,
         base_income: 0.0,
         building_occupation_min: 0,
         factory_price: 0.0,
@@ -63,24 +63,15 @@ fn test_game() {
         income_rate: 0.0,
         deprecate_rate: 0.0,
     };
-    let mut game = Game::new(config);
-    // game.create_player();
+    let player_ids = vec![1, 2, 3];
+    let mut game = Game::new(player_ids, config);
+
     println!("Start run game...");
-    game.run();
+    let state = game.run();
+    println!("{:?}", state);
     println!("End run game.");
 }
 
-struct A(i32);
-
-impl Drop for A {
-    fn drop(&mut self) {
-        println!("Drop {}", &self.0);
-    }
-}
-
 fn main() {
-    let mut a = vec![A(1), A(2), A(3)];
-    println!("Will swap");
-    let b: Vec<A> = a.drain(..).collect();
-    println!("Done swap");
+    test_game();
 }

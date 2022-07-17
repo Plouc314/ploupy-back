@@ -9,6 +9,7 @@ struct MapConfig {
     pub max_occupation: u32,
 }
 
+#[derive(Clone, Debug)]
 pub struct MapState {
     tiles: Vec<TileState>,
     /// store state of dead factories
@@ -78,22 +79,25 @@ impl Map {
             .get_mut(coord.y as usize)
     }
 
-    /// Reset current state
-    /// In case is_state is true
-    /// create new MapState instance
-    fn reset_state(&mut self) {
-        if self.is_state {
-            self.current_state = MapState::new();
-        }
-        self.is_state = false
-    }
-
     /// Return the current state
     /// AND stores that there is a map state
     /// (see self.is_state)
     fn mut_state(&mut self) -> &mut MapState {
         self.is_state = true;
         &mut self.current_state
+    }
+
+    /// Return current state \
+    /// In case is_state is true,
+    /// reset current state and create new MapState instance
+    pub fn flush_state(&mut self) -> Option<MapState> {
+        if !self.is_state {
+            return None;
+        }
+        let state = self.current_state.clone();
+        self.current_state = MapState::new();
+        self.is_state = false;
+        Some(state)
     }
 
     /// Return the tiles that are neighbour of the `tile` \
@@ -110,9 +114,7 @@ impl Map {
         }
         return neighbours;
     }
-}
 
-impl Map {
     /// Return if the given tile can be farmed by a probe of `player`
     fn is_tile_valid_farm_target(&self, tile: &Tile, player: &Player) -> bool {
         // check if tile occupation full
@@ -210,6 +212,7 @@ impl Map {
     /// Store the tile state, potential building death in current state \
     /// Return if it could be done
     pub fn claim_tile(&mut self, player: &Player, coord: &Coord) -> bool {
+        println!("coord {:?}", coord);
         let tile = self.get_mut_tile(coord);
         let tile = match tile {
             None => {
@@ -217,6 +220,7 @@ impl Map {
             }
             Some(tile) => tile,
         };
+        println!("tile {:?}", tile.coord);
         let mut deaths: Option<(u128, u128)> = None;
         match tile.owner_id {
             None => {
@@ -260,6 +264,7 @@ struct TileConfig {
     max_occupation: u32,
 }
 
+#[derive(Clone, Debug)]
 pub struct TileState {
     pub id: u128,
     pub occupation: Option<u32>,

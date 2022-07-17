@@ -8,12 +8,12 @@ mod probe;
 mod random;
 
 pub use self::core::*;
-use self::factory::*;
+pub use self::factory::*;
 pub use self::game::*;
 pub use self::geometry::*;
-use self::map::*;
-use self::player::*;
-use self::probe::*;
+pub use self::map::*;
+pub use self::player::*;
+pub use self::probe::*;
 
 pub struct GameConfig {
     /// dimension of the map (unit: coord),

@@ -14,7 +14,7 @@ pub enum ProbePolicy {
     Claim,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ProbeDeathCause {
     Exploded,
     Shot,
@@ -26,7 +26,7 @@ struct ProbeConfig {
     claim_delay: f64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProbeState {
     /// If id is None -> the probe has just been created
     pub id: Option<u128>,

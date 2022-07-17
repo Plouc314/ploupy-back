@@ -13,7 +13,7 @@ pub enum FactoryPolicy {
     Wait,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FactoryDeathCause {
     Conquered,
 }
@@ -24,7 +24,7 @@ struct FactoryConfig {
     probe_maintenance_costs: f64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FactoryState {
     pub id: u128,
     /// Only specified once, when the factory dies
@@ -172,8 +172,15 @@ impl Factory {
 
     /// run function
     pub fn run(&mut self, player: &Player, ctx: &mut FrameContext) -> Option<FactoryState> {
+        println!(
+            "[({:.3}) Factory {:.3}] run...",
+            player.id.to_string(),
+            self.id.to_string()
+        );
+        println!("probes {}", self.probes.len());
         match self.policy {
             FactoryPolicy::Expand => {
+                println!("expand");
                 self.expand(player, ctx);
             }
             FactoryPolicy::Produce => {
@@ -198,9 +205,9 @@ impl Factory {
             }
         }
 
-        // remove all death probes
-        for idx in dead_probe_idxs {
-            self.probes.remove(idx);
+        // remove all death probes (note: in REVERSE order)
+        for idx in dead_probe_idxs.iter().rev() {
+            self.probes.remove(*idx);
         }
 
         // handle state
