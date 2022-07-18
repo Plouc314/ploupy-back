@@ -1,11 +1,7 @@
-use std::rc::{Rc, Weak};
-
-use log::warn;
-
 use super::core::{self, FrameContext};
 use super::core::{Coord, Point};
 use super::player::Player;
-use super::{geometry, GameConfig};
+use super::{geometry, Delayer, GameConfig};
 
 #[derive(Debug)]
 pub enum ProbePolicy {
@@ -37,15 +33,6 @@ pub struct ProbeState {
 }
 
 impl ProbeState {
-    pub fn new(probe: &Probe) -> Self {
-        ProbeState {
-            id: Some(probe.id),
-            death: None,
-            pos: None,
-            target: None,
-        }
-    }
-
     pub fn from_id(id: u128) -> Self {
         ProbeState {
             id: Some(id),
@@ -66,6 +53,8 @@ pub struct Probe {
     target: Point,
     /// direction of the movement to the target
     move_dir: Point,
+    /// Delay to wait in order to claim a tile
+    delayer_claim: Delayer,
     /// Store potential probe state at this frame
     /// used to gradually build probe state during
     /// run() function (see mut_state)
@@ -74,8 +63,6 @@ pub struct Probe {
     /// Indicates if a probe state was built in
     /// the current frame
     is_state: bool,
-    /// Amount of time already waited during the claiming (unit: sec)
-    claim_counter: f64,
 }
 
 impl Probe {
@@ -97,7 +84,7 @@ impl Probe {
             move_dir: Point::new(0.0, 0.0),
             current_state: ProbeState::from_id(id),
             is_state: false,
-            claim_counter: 0.0,
+            delayer_claim: Delayer::new(config.probe_claim_delay),
         }
     }
 
@@ -135,8 +122,7 @@ impl Probe {
                 target = ctx.map.get_probe_attack_target(player, &self);
             }
             _ => {
-                warn!("Unexpected probe policy: {:?}", self.policy);
-                return;
+                panic!("Unexpected probe policy: {:?}", self.policy);
             }
         };
         if let Some(target) = target {
@@ -174,14 +160,6 @@ impl Probe {
         self.pos.y += self.move_dir.y * ctx.dt;
     }
 
-    /// Claim the tile at the current pos
-    /// Switch to Claim policy
-    fn claim(&mut self, player: &Player, ctx: &mut FrameContext) {
-        ctx.map.claim_tile(player, &self.get_coord());
-        self.claim_counter = 0.0;
-        self.policy = ProbePolicy::Claim;
-    }
-
     /// Claims neighbours tiles twice \
     /// Notify death in probe state
     fn explode(&mut self, player: &Player, ctx: &mut FrameContext) {
@@ -193,11 +171,12 @@ impl Probe {
         }
     }
 
-    /// Wait for `claim_delay` then switch to Farm policy
-    fn wait_claim(&mut self, player: &Player, ctx: &mut FrameContext) {
-        self.claim_counter += ctx.dt;
-        if self.claim_counter >= self.config.claim_delay {
+    /// Wait for `claim_delay` then claim the tile
+    /// at the current pos, switch to Farm policy
+    fn claim(&mut self, player: &Player, ctx: &mut FrameContext) {
+        if self.delayer_claim.wait(ctx) {
             self.policy = ProbePolicy::Farm;
+            ctx.map.claim_tile(player, &self.get_coord());
             self.select_next_target(player, ctx);
         }
     }
@@ -208,7 +187,7 @@ impl Probe {
             ProbePolicy::Farm => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.claim(player, ctx);
+                    self.policy = ProbePolicy::Claim;
                 }
             }
             ProbePolicy::Attack => {
@@ -218,7 +197,7 @@ impl Probe {
                 }
             }
             ProbePolicy::Claim => {
-                self.wait_claim(player, ctx);
+                self.claim(player, ctx);
             }
         }
 

@@ -82,3 +82,38 @@ pub struct FrameContext<'a> {
 pub fn generate_unique_id() -> u128 {
     return uuid::Uuid::new_v4().as_u128();
 }
+
+/// Delayer
+/// Designed to be called each frame (see `wait()`)
+pub struct Delayer {
+    delay: f64,
+    counter: f64,
+}
+
+impl Delayer {
+    /// Create new instance
+    /// Specify the delay to wait (unit: sec)
+    pub fn new(delay: f64) -> Self {
+        Delayer {
+            delay: delay,
+            counter: 0.0,
+        }
+    }
+
+    /// Reset the delay counter
+    pub fn reset(&mut self) {
+        self.counter = 0.0;
+    }
+
+    /// Increment the delay counter,
+    /// when the delay is reached: reset the counter
+    /// and return true
+    pub fn wait(&mut self, ctx: &FrameContext) -> bool {
+        self.counter += ctx.dt;
+        if self.counter >= self.delay {
+            self.counter = 0.0;
+            return true;
+        }
+        false
+    }
+}

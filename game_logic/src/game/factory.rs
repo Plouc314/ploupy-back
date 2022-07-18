@@ -1,11 +1,9 @@
-use std::borrow::Borrow;
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use log;
 
 use super::core::{Coord, FrameContext};
 use super::player::Player;
 use super::probe::{Probe, ProbeDeathCause, ProbeState};
-use super::{core, geometry, GameConfig};
+use super::{core, geometry, Delayer, GameConfig};
 
 pub enum FactoryPolicy {
     Expand,
@@ -52,11 +50,13 @@ pub struct Factory {
     probes: Vec<Probe>,
     /// step in the expansion phase
     expand_step: u32,
-    /// Amount of time already waited when producing (unit: sec)
-    produce_counter: f64,
+    /// Delay to wait to produce probe
+    delayer_produce: Delayer,
+    /// Delay to wait between expand step
+    delayer_expand: Delayer,
     /// Store potential factory state at this frame
     /// used to gradually build factory state during
-    /// run() function (see mut_state)
+    /// run() function
     /// Should not be dealt with directly
     current_state: FactoryState,
     /// Indicates if a factory state was built in
@@ -78,10 +78,16 @@ impl Factory {
             pos: pos,
             probes: Vec::new(),
             expand_step: 0,
-            produce_counter: 0.0,
+            delayer_produce: Delayer::new(config.factory_build_probe_delay),
+            delayer_expand: Delayer::new(0.5),
             current_state: FactoryState::from_id(id),
             is_state: false,
         }
+    }
+
+    /// factory policy getter
+    pub fn get_policy(&self) -> &FactoryPolicy {
+        &self.policy
     }
 
     /// Reset current state
@@ -92,14 +98,6 @@ impl Factory {
             self.current_state = FactoryState::from_id(self.id);
         }
         self.is_state = false
-    }
-
-    /// Return the current state
-    /// AND stores that there is a factory state
-    /// (see self.is_state)
-    fn mut_state(&mut self) -> &mut FactoryState {
-        self.is_state = true;
-        &mut self.current_state
     }
 
     /// Attach a new probe to the factory
@@ -117,6 +115,11 @@ impl Factory {
         }
     }
 
+    /// Return factory income (costs)
+    pub fn get_income(&self) -> f64 {
+        -(self.probes.len() as f64) * self.config.probe_maintenance_costs
+    }
+
     /// Kill all factory's probes \
     /// Return their states (with death cause)
     pub fn die(&mut self) -> Vec<ProbeState> {
@@ -132,6 +135,9 @@ impl Factory {
     /// Claim tiles next to the factory
     /// When done, switch to Produce policy
     fn expand(&mut self, player: &Player, ctx: &mut FrameContext) {
+        if !self.delayer_expand.wait(ctx) {
+            return;
+        }
         self.expand_step += 1;
         if self.expand_step == 4 {
             self.expand_step = 0;
@@ -155,9 +161,8 @@ impl Factory {
             self.policy = FactoryPolicy::Wait;
             return;
         }
-        self.produce_counter += ctx.dt;
-        if self.produce_counter >= self.config.build_probe_delay {
-            self.produce_counter = 0.0;
+        if self.delayer_produce.wait(ctx) {
+            println!("Create probe");
             self.current_state.probes.push(self.create_probe_state());
             self.is_state = true;
         }
@@ -172,15 +177,13 @@ impl Factory {
 
     /// run function
     pub fn run(&mut self, player: &Player, ctx: &mut FrameContext) -> Option<FactoryState> {
-        println!(
+        log::debug!(
             "[({:.3}) Factory {:.3}] run...",
             player.id.to_string(),
             self.id.to_string()
         );
-        println!("probes {}", self.probes.len());
         match self.policy {
             FactoryPolicy::Expand => {
-                println!("expand");
                 self.expand(player, ctx);
             }
             FactoryPolicy::Produce => {
@@ -199,7 +202,6 @@ impl Factory {
                     dead_probe_idxs.push(i);
                 }
 
-                // manual call to mut_state() cause of borrowing-stuff
                 self.current_state.probes.push(state);
                 self.is_state = true;
             }

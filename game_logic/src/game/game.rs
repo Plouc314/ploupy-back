@@ -9,8 +9,8 @@ use std::cmp;
 
 #[derive(Clone, Debug)]
 pub struct GameState {
-    map: Option<MapState>,
-    players: Vec<PlayerState>,
+    pub map: Option<MapState>,
+    pub players: Vec<PlayerState>,
 }
 
 impl GameState {
@@ -66,8 +66,8 @@ impl Game {
         let mut positions = Vec::with_capacity(n_players as usize);
         for i in 0..n_players {
             let angle = i as f64 / n_players as f64 * 2.0 * 3.141592;
-            let x = (radius - margin) * angle.sin() + radius;
-            let y = (radius - margin) * angle.cos() + radius;
+            let x = (radius - margin) * angle.cos() + radius;
+            let y = (radius - margin) * angle.sin() + radius;
             positions.push(Coord::new(x as i32, y as i32));
         }
         return positions;
@@ -77,7 +77,6 @@ impl Game {
     /// Create initial conditions (factory/probes)
     fn create_players(&mut self, player_ids: Vec<u128>) {
         let start_positions = self.get_start_positions(self.config.n_player);
-        println!("start positions {:?}", start_positions);
         for (id, pos) in player_ids.iter().zip(start_positions) {
             let player = self.create_player(*id, pos);
             self.players.push(player);
@@ -114,12 +113,14 @@ impl Game {
         for player in self.players.iter_mut() {
             let state = player.run(&mut ctx);
             if let Some(state) = state {
+                println!("is player state");
                 self.current_state.players.push(state);
                 self.is_state = true;
             }
         }
 
         if let Some(map_state) = self.map.flush_state() {
+            println!("is map state");
             self.current_state.map = Some(map_state);
             self.is_state = true;
         }

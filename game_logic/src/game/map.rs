@@ -7,11 +7,12 @@ use log::warn;
 struct MapConfig {
     pub dim: Coord,
     pub max_occupation: u32,
+    pub income_rate: f64,
 }
 
 #[derive(Clone, Debug)]
 pub struct MapState {
-    tiles: Vec<TileState>,
+    pub tiles: Vec<TileState>,
     /// store state of dead factories
     dead_building: HashMap<u128, Vec<u128>>,
 }
@@ -54,6 +55,7 @@ impl Map {
             config: MapConfig {
                 dim: dim,
                 max_occupation: config.max_occupation,
+                income_rate: config.income_rate,
             },
             tiles: tiles,
             current_state: MapState::new(),
@@ -85,6 +87,19 @@ impl Map {
     fn mut_state(&mut self) -> &mut MapState {
         self.is_state = true;
         &mut self.current_state
+    }
+
+    /// Return the income of all his owned tiles to one player
+    pub fn get_player_income(&self, player: &Player) -> f64 {
+        let mut income = 0.0;
+        for col in self.tiles.iter() {
+            for tile in col.iter() {
+                if tile.is_owned_by(player) {
+                    income += tile.occupation as f64 * self.config.income_rate;
+                }
+            }
+        }
+        income
     }
 
     /// Return current state \
@@ -212,7 +227,6 @@ impl Map {
     /// Store the tile state, potential building death in current state \
     /// Return if it could be done
     pub fn claim_tile(&mut self, player: &Player, coord: &Coord) -> bool {
-        println!("coord {:?}", coord);
         let tile = self.get_mut_tile(coord);
         let tile = match tile {
             None => {
@@ -220,7 +234,7 @@ impl Map {
             }
             Some(tile) => tile,
         };
-        println!("tile {:?}", tile.coord);
+
         let mut deaths: Option<(u128, u128)> = None;
         match tile.owner_id {
             None => {
@@ -267,6 +281,7 @@ struct TileConfig {
 #[derive(Clone, Debug)]
 pub struct TileState {
     pub id: u128,
+    pub coord: Option<Coord>,
     pub occupation: Option<u32>,
     pub owner_id: Option<u128>,
 }
@@ -275,6 +290,7 @@ impl TileState {
     pub fn from_tile(tile: &Tile) -> Self {
         TileState {
             id: tile.id,
+            coord: None, // only specify coord on map creation
             occupation: Some(tile.occupation),
             owner_id: tile.owner_id,
         }
