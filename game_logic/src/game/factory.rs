@@ -162,7 +162,6 @@ impl Factory {
             return;
         }
         if self.delayer_produce.wait(ctx) {
-            println!("Create probe");
             self.current_state.probes.push(self.create_probe_state());
             self.is_state = true;
         }

@@ -112,6 +112,23 @@ impl Player {
         state
     }
 
+    /// Kill a factory (if `factory_id` is valid) \
+    /// Return probe states of dead probes (see `Factory.die()`)
+    pub fn kill_factory(&mut self, factory_id: u128) -> Option<Vec<ProbeState>> {
+        let mut idx = None;
+        for (i, factory) in self.factories.iter_mut().enumerate() {
+            if factory.id == factory_id {
+                idx = Some(i);
+                break;
+            }
+        }
+        if let Some(idx) = idx {
+            let mut factory = self.factories.remove(idx);
+            return Some(factory.die());
+        }
+        None
+    }
+
     /// Compute the income prediction given the last computed income
     fn get_income_prediction(&self, income: f64) -> f64 {
         let mut prediction = income;
@@ -132,7 +149,7 @@ impl Player {
         if !self.delayer_income.wait(ctx) {
             return;
         }
-        let mut income = 0.0;
+        let mut income = self.config.base_income;
         income += ctx.map.get_player_income(&self);
         for factory in self.factories.iter() {
             income += factory.get_income();

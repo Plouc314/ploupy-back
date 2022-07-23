@@ -14,6 +14,7 @@ struct MapConfig {
 pub struct MapState {
     pub tiles: Vec<TileState>,
     /// store state of dead factories
+    /// Internal to rust implementation
     dead_building: HashMap<u128, Vec<u128>>,
 }
 
@@ -23,6 +24,11 @@ impl MapState {
             tiles: Vec::new(),
             dead_building: HashMap::new(),
         }
+    }
+
+    /// Return `dead_building` attribute
+    pub fn get_dead_building(&self) -> &HashMap<u128, Vec<u128>> {
+        &self.dead_building
     }
 }
 
@@ -151,7 +157,7 @@ impl Map {
                 }
             }
         }
-        return false;
+        return true;
     }
 
     /// Return a target to farm (own or unoccupied tile)

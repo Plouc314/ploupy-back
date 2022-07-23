@@ -183,8 +183,15 @@ impl Probe {
 
     /// run function
     pub fn run(&mut self, player: &Player, ctx: &mut FrameContext) -> Option<ProbeState> {
+        log::debug!(
+            "[({:.3}) probe {:.3}] run... ({:?})",
+            player.id.to_string(),
+            self.id.to_string(),
+            &self.policy
+        );
         match self.policy {
             ProbePolicy::Farm => {
+                log::debug!("pos: {:?}  target: {:?}", &self.pos, &self.target);
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
                     self.policy = ProbePolicy::Claim;

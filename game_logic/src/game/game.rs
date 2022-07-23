@@ -3,7 +3,7 @@ use super::{
     map::{Map, MapState},
     player::{Player, PlayerState},
     probe::Probe,
-    Coord, GameConfig,
+    Coord, FactoryDeathCause, FactoryState, GameConfig, ProbeState,
 };
 use std::cmp;
 
@@ -59,6 +59,16 @@ impl Game {
         self.is_state = false
     }
 
+    /// Return mut ref of Player with given id, if found
+    fn get_player_mut(&mut self, id: u128) -> Option<&mut Player> {
+        for player in self.players.iter_mut() {
+            if player.id == id {
+                return Some(player);
+            }
+        }
+        None
+    }
+
     /// Return suitable start positions for n players
     fn get_start_positions(&self, n_players: u32) -> Vec<Coord> {
         let radius = cmp::min(self.config.dim.x, self.config.dim.y) as f64 / 2.0;
@@ -103,6 +113,42 @@ impl Game {
         player
     }
 
+    /// Update player state with given factory states
+    /// In case player state doesn't already exists, create it
+    fn update_player_state(&mut self, player_id: u128, mut factory_states: Vec<FactoryState>) {
+        for player_state in self.current_state.players.iter_mut() {
+            if player_state.id == player_id {
+                player_state.factories.append(&mut factory_states);
+                return;
+            }
+        }
+        let mut player_state = PlayerState::from_id(player_id);
+        player_state.factories.append(&mut factory_states);
+        self.current_state.players.push(player_state);
+    }
+
+    /// Kill all building marked has dead by map
+    /// Update corresponding player states
+    fn handle_map_dead_building(&mut self, map_state: &MapState) {
+        for (player_id, dead_ids) in map_state.get_dead_building().iter() {
+            // collect all death states
+            let mut factory_states = Vec::new();
+            if let Some(player) = self.get_player_mut(*player_id) {
+                for id in dead_ids.iter() {
+                    // try kill factory (will later be turret too)
+                    if let Some(mut probes) = player.kill_factory(*id) {
+                        // if it could be killed then it was a factory
+                        let mut factory_state = FactoryState::from_id(*id);
+                        factory_state.death = Some(FactoryDeathCause::Conquered);
+                        factory_state.probes.append(&mut probes);
+                        factory_states.push(factory_state);
+                    }
+                }
+            }
+            self.update_player_state(*player_id, factory_states);
+        }
+    }
+
     pub fn run(&mut self) -> Option<GameState> {
         let mut ctx = FrameContext {
             dt: 1.0 / 60.0,
@@ -113,14 +159,13 @@ impl Game {
         for player in self.players.iter_mut() {
             let state = player.run(&mut ctx);
             if let Some(state) = state {
-                println!("is player state");
                 self.current_state.players.push(state);
                 self.is_state = true;
             }
         }
 
         if let Some(map_state) = self.map.flush_state() {
-            println!("is map state");
+            self.handle_map_dead_building(&map_state);
             self.current_state.map = Some(map_state);
             self.is_state = true;
         }
