@@ -64,7 +64,7 @@ pub struct GameConfig {
     pub turret_price: f64,
 
     /// delay to wait for the turret between two fires (sec)
-    pub turret_fire_delay: u32,
+    pub turret_fire_delay: f64,
 
     /// scope of the turret (unit| coord)
     pub turret_scope: f64,

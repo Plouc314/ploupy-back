@@ -53,6 +53,8 @@ pub struct Probe {
     target: Point,
     /// direction of the movement to the target
     move_dir: Point,
+    /// Delay to wait to reach target
+    delayer_travel: Delayer,
     /// Delay to wait in order to claim a tile
     delayer_claim: Delayer,
     /// Store potential probe state at this frame
@@ -84,6 +86,7 @@ impl Probe {
             move_dir: Point::new(0.0, 0.0),
             current_state: ProbeState::from_id(id),
             is_state: false,
+            delayer_travel: Delayer::new(0.0),
             delayer_claim: Delayer::new(config.probe_claim_delay),
         }
     }
@@ -92,14 +95,17 @@ impl Probe {
         self.pos.as_coord()
     }
 
-    /// Reset current state
-    /// In case is_state is true
-    /// create new ProbeState instance
-    fn reset_state(&mut self) {
-        if self.is_state {
-            self.current_state = ProbeState::from_id(self.id);
+    /// Return current state \
+    /// In case is_state is true,
+    /// reset current state and create new ProbeState instance
+    pub fn flush_state(&mut self) -> Option<ProbeState> {
+        if !self.is_state {
+            return None;
         }
-        self.is_state = false
+        let state = self.current_state.clone();
+        self.current_state = ProbeState::from_id(self.id);
+        self.is_state = false;
+        Some(state)
     }
 
     /// Return the current state
@@ -108,6 +114,16 @@ impl Probe {
     fn mut_state(&mut self) -> &mut ProbeState {
         self.is_state = true;
         &mut self.current_state
+    }
+
+    /// Return complete current probe state
+    pub fn get_complete_state(&self) -> ProbeState {
+        ProbeState {
+            id: Some(self.id),
+            death: None,
+            pos: Some(self.pos.clone()),
+            target: Some(self.target.as_coord()),
+        }
     }
 
     /// Select a new target and (if found) set the new target
@@ -140,18 +156,18 @@ impl Probe {
     /// Note: don't update current state
     pub fn set_target(&mut self, target: Point) {
         self.target = target;
-        self.move_dir =
-            Point::new(self.target.x - self.pos.x, self.target.y - self.pos.y).normalize();
+        self.move_dir = Point::new(self.target.x - self.pos.x, self.target.y - self.pos.y);
+        self.delayer_travel
+            .set_delay(self.move_dir.norm() / self.config.speed);
+        self.delayer_travel.reset();
+        self.move_dir.normalize();
         self.move_dir.mul(self.config.speed);
     }
 
     /// Return if the current position is sufficiently close to the target
     /// to be considered equals
-    fn is_target_reached(&self, ctx: &mut FrameContext) -> bool {
-        let dx = self.target.x - self.pos.x;
-        let dy = self.target.y - self.pos.y;
-        let threshold = 1.1 * ctx.dt * self.config.speed;
-        (dx * dx + dy * dy) < threshold * threshold
+    fn is_target_reached(&mut self, ctx: &mut FrameContext) -> bool {
+        self.delayer_travel.wait(ctx)
     }
 
     /// Update current position: move to target
@@ -195,6 +211,9 @@ impl Probe {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
                     self.policy = ProbePolicy::Claim;
+                    self.pos = self.target.clone();
+                    self.current_state.pos = Some(self.target.clone());
+                    self.is_state = true;
                 }
             }
             ProbePolicy::Attack => {
@@ -208,12 +227,6 @@ impl Probe {
             }
         }
 
-        // handle state
-        let mut state = None;
-        if self.is_state {
-            state = Some(self.current_state.clone());
-        }
-        self.reset_state();
-        state
+        self.flush_state()
     }
 }

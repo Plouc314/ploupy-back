@@ -49,14 +49,30 @@ impl Game {
         game
     }
 
-    /// Reset current state
-    /// In case is_state is true
-    /// create new PlayerState instance
-    fn reset_state(&mut self) {
-        if self.is_state {
-            self.current_state = GameState::new();
+    /// Return current state \
+    /// In case is_state is true,
+    /// reset current state and create new GameState instance
+    pub fn flush_state(&mut self) -> Option<GameState> {
+        if !self.is_state {
+            return None;
         }
-        self.is_state = false
+        let state = self.current_state.clone();
+        self.current_state = GameState::new();
+        self.is_state = false;
+        Some(state)
+    }
+
+    /// Return complete current game state
+    pub fn get_complete_state(&self) -> GameState {
+        println!("GET COMPLETE STATE");
+        let mut state = GameState {
+            players: Vec::with_capacity(self.players.len()),
+            map: Some(self.map.get_complete_state()),
+        };
+        for player in self.players.iter() {
+            state.players.push(player.get_complete_state());
+        }
+        state
     }
 
     /// Return mut ref of Player with given id, if found
@@ -170,12 +186,6 @@ impl Game {
             self.is_state = true;
         }
 
-        // handle state
-        let mut state = None;
-        if self.is_state {
-            state = Some(self.current_state.clone());
-        }
-        self.reset_state();
-        state
+        self.flush_state()
     }
 }

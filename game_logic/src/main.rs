@@ -57,7 +57,7 @@ fn test_game() {
         probe_claim_delay: 0.0,
         probe_maintenance_costs: 0.0,
         turret_price: 0.0,
-        turret_fire_delay: 0,
+        turret_fire_delay: 0.0,
         turret_scope: 0.0,
         turret_maintenance_costs: 0.0,
         income_rate: 0.0,

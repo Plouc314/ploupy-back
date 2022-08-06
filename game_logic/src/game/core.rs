@@ -16,16 +16,19 @@ impl Point {
         Coord::new(self.x as i32, self.y as i32)
     }
 
-    /// Consume self \
-    /// Return normalized point
-    pub fn normalize(mut self) -> Self {
-        let norm = (self.x * self.x + self.y * self.y).sqrt();
+    /// Normalize self
+    pub fn normalize(&mut self) {
+        let norm = self.norm();
         if norm == 0.0 {
-            return self;
+            return;
         }
         self.x /= norm;
         self.y /= norm;
-        self
+    }
+
+    /// Return the norm of the point
+    pub fn norm(&self) -> f64 {
+        (self.x * self.x + self.y * self.y).sqrt()
     }
 
     /// Add another point to self (inplace)
@@ -103,6 +106,11 @@ impl Delayer {
     /// Reset the delay counter
     pub fn reset(&mut self) {
         self.counter = 0.0;
+    }
+
+    /// Set the delay to wait (unit: sec)
+    pub fn set_delay(&mut self, delay: f64) {
+        self.delay = delay;
     }
 
     /// Increment the delay counter,

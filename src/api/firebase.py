@@ -122,9 +122,11 @@ class Firebase:
         Create a user in the db
         """
         # build dict without uid
-        # rely on pydantic for datetime conversions
+        # rely on pydantic for datetime conversions (NOPE)
         data = user.dict()
         data.pop("uid")
+        data["joined_on"] = data["joined_on"].isoformat()
+        data["last_online"] = data["last_online"].isoformat()
 
         # push to db
         db.reference(f"/users/{user.uid}").set(data)

@@ -2,7 +2,7 @@ import uuid
 
 from src.models import core, game as _g, sio as _s, api as _a
 
-from src.game import Game
+from src.game import GameRS as Game
 
 from .manager import Manager
 from ..client import client
@@ -108,14 +108,14 @@ class GameManager(Manager):
         - Set user `gid` attribute
         - If not socket-io user in sio.Game, add it
         """
-        if gs.game.get_player(user.user.username) is not None:
-            # link player
-            if not self._is_user(gs.players, user):
-                gs.players.append(user)
-        else:
-            # link spectator
-            if not self._is_user(gs.spectators, user):
-                gs.spectators.append(user)
+        # if gs.game.get_player(user.user.username) is not None:
+        # link player
+        if not self._is_user(gs.players, user):
+            gs.players.append(user)
+        # else:
+        #     # link spectator
+        #     if not self._is_user(gs.spectators, user):
+        #         gs.spectators.append(user)
 
         user.gid = gs.gid
         sio.enter_room(user.sid, room=gs.gid)

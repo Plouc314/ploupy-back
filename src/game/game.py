@@ -2,12 +2,73 @@ from functools import partial
 from typing import Callable
 import numpy as np
 
+import game_logic as gl
 from src.models import core as _c, game as _g
 from src.core import Recorder, ActionException
 from src.sio import JobManager
 
 from .map import Map
 from .player import Player
+
+
+class GameRS:
+    def __init__(
+        self,
+        users: list[_c.User],
+        job_manager: JobManager,
+        config: _c.GameConfig,
+        on_end_game: Callable[[_g.GameResult, bool], None],
+    ):
+        self.users = users
+        self.job_manager = job_manager
+        self.config = config
+        self._game = gl.Game([abs(hash(u.uid)) for u in users], config.dict())
+
+        job = self.job_manager.make_job("game_state", self.job_run)
+        job.start()
+
+    async def job_run(self):
+        while True:
+            await self.job_manager.sleep(1 / 60)
+            state = self._game.run()
+
+            if state is None:
+                continue
+            self._cast_rs_model(state)
+            yield _g.GameState(**state)
+
+    def _get_username(self, id: int) -> str:
+        for u in self.users:
+            if abs(hash(u.uid)) == id:
+                return u.username
+
+    def _cast_rs_model(self, raw: dict):
+        for ps in raw["players"]:
+            ps["username"] = self._get_username(ps.pop("id"))
+            ps["alive"] = not ps.get("death", None)
+            probe_states = []
+            for fs in ps["factories"]:
+                fs["alive"] = not fs.get("death", None)
+                probe_states += (
+                    p | {"alive": not p.get("death", None)} for p in fs.pop("probes")
+                )
+            ps["probes"] = probe_states
+
+        _map = raw.get("map")
+        if _map is not None:
+            for _tile in _map["tiles"]:
+                if "owner_id" in _tile.keys():
+                    _tile["owner"] = self._get_username(_tile.pop("owner_id"))
+
+    @property
+    def model(self) -> _g.Game:
+        """
+        Return the model (pydantic) representation of the instance
+        """
+        state = self._game.get_state()
+        self._cast_rs_model(state)
+
+        return _g.Game(config=self.config, **state)
 
 
 class Game:

@@ -121,6 +121,21 @@ impl Map {
         Some(state)
     }
 
+    /// Return complete current map state
+    pub fn get_complete_state(&self) -> MapState {
+        let n_tiles = self.config.dim.x * self.config.dim.y;
+        let mut state = MapState {
+            tiles: Vec::with_capacity(n_tiles as usize),
+            dead_building: HashMap::new(),
+        };
+        for col in self.tiles.iter() {
+            for tile in col.iter() {
+                state.tiles.push(tile.get_complete_state());
+            }
+        }
+        state
+    }
+
     /// Return the tiles that are neighbour of the `tile` \
     /// Neighbours as defined by `geometry::square_without_origin(tile.coord, distance)`
     pub fn get_neighbour_tiles(&self, tile: &Tile, distance: u32) -> Vec<&Tile> {
@@ -155,6 +170,7 @@ impl Map {
                         return true;
                     }
                 }
+                return false;
             }
         }
         return true;
@@ -163,7 +179,7 @@ impl Map {
     /// Return a target to farm (own or unoccupied tile)
     /// in the surroundings of the probe if possible
     fn get_close_probe_farm_target(&self, player: &Player, coord: &Coord) -> Option<Coord> {
-        let mut coords = geometry::square(coord, 3);
+        let mut coords = geometry::square_without_origin(coord, 3);
         random::shuffle_vec(&mut coords);
 
         for coord in coords.iter() {
@@ -325,6 +341,16 @@ impl Tile {
             owner_id: None,
             building_id: None,
         };
+    }
+
+    /// Return complete current tile state
+    pub fn get_complete_state(&self) -> TileState {
+        TileState {
+            id: self.id,
+            coord: Some(self.coord.clone()),
+            occupation: Some(self.occupation),
+            owner_id: self.owner_id,
+        }
     }
 
     /// Return if the tile is owned by the given player

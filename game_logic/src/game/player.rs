@@ -70,14 +70,32 @@ impl Player {
         }
     }
 
-    /// Reset current state
-    /// In case is_state is true
-    /// create new PlayerState instance
-    fn reset_state(&mut self) {
-        if self.is_state {
-            self.current_state = PlayerState::from_id(self.id);
+    /// Return current state \
+    /// In case is_state is true,
+    /// reset current state and create new PlayerState instance
+    pub fn flush_state(&mut self) -> Option<PlayerState> {
+        if !self.is_state {
+            return None;
         }
-        self.is_state = false
+        let state = self.current_state.clone();
+        self.current_state = PlayerState::from_id(self.id);
+        self.is_state = false;
+        Some(state)
+    }
+
+    /// Return complete current player state
+    pub fn get_complete_state(&self) -> PlayerState {
+        println!("PLAYER COMPLETE STATE");
+        let mut state = PlayerState {
+            id: self.id,
+            money: Some(self.money),
+            income: Some(0.0),
+            factories: Vec::with_capacity(self.factories.len()),
+        };
+        for factory in self.factories.iter() {
+            state.factories.push(factory.get_complete_state());
+        }
+        state
     }
 
     /// Create a new probe, set a target for the probe \
@@ -206,12 +224,6 @@ impl Player {
             self.current_state.money = Some(self.money);
         }
 
-        // handle state
-        let mut state = None;
-        if self.is_state {
-            state = Some(self.current_state.clone());
-        }
-        self.reset_state();
-        state
+        self.flush_state()
     }
 }
