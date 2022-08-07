@@ -1,7 +1,7 @@
 use super::core::{self, FrameContext};
 use super::core::{Coord, Point};
 use super::player::Player;
-use super::{geometry, Delayer, GameConfig};
+use super::{geometry, Delayer, GameConfig, Identifiable, State, StateHandler, NOT_IDENTIFIABLE};
 
 #[derive(Debug)]
 pub enum ProbePolicy {
@@ -24,21 +24,63 @@ struct ProbeConfig {
 
 #[derive(Clone, Debug)]
 pub struct ProbeState {
-    /// If id is None -> the probe has just been created
-    pub id: Option<u128>,
-    /// Only specified once, when the probe dies
+    pub id: u128,
     pub death: Option<ProbeDeathCause>,
     pub pos: Option<Point>,
     pub target: Option<Coord>,
+    /// Specify that the probe should be created
+    /// Internal to rust implementation
+    just_created: bool,
 }
 
-impl ProbeState {
-    pub fn from_id(id: u128) -> Self {
+impl Identifiable for ProbeState {
+    fn id(&self) -> u128 {
+        self.id
+    }
+}
+
+impl State for ProbeState {
+    type Metadata = u128;
+
+    fn new(_metadata: &Self::Metadata) -> Self {
         ProbeState {
-            id: Some(id),
+            id: *_metadata,
             death: None,
             pos: None,
             target: None,
+            just_created: false,
+        }
+    }
+
+    fn merge(&mut self, state: Self) {
+        if let Some(death) = state.death {
+            self.death = Some(death);
+        }
+        if let Some(pos) = state.pos {
+            self.pos = Some(pos);
+        }
+        if let Some(target) = state.target {
+            self.target = Some(target);
+        }
+    }
+}
+
+impl ProbeState {
+    /// Return if the probe has just been created
+    /// (without id)
+    pub fn just_created(&self) -> bool {
+        self.just_created
+    }
+
+    /// Create the probe state of a new probe,
+    /// i.e.: with only a position
+    pub fn create_created_state(pos: Point) -> Self {
+        ProbeState {
+            id: NOT_IDENTIFIABLE,
+            death: None,
+            pos: Some(pos),
+            target: None,
+            just_created: true,
         }
     }
 }
@@ -46,6 +88,7 @@ impl ProbeState {
 pub struct Probe {
     pub id: u128,
     config: ProbeConfig,
+    state_handle: StateHandler<ProbeState>,
     policy: ProbePolicy,
     pub pos: Point,
     /// store target as Point for optimization
@@ -57,14 +100,6 @@ pub struct Probe {
     delayer_travel: Delayer,
     /// Delay to wait in order to claim a tile
     delayer_claim: Delayer,
-    /// Store potential probe state at this frame
-    /// used to gradually build probe state during
-    /// run() function (see mut_state)
-    /// Should not be dealt with directly
-    current_state: ProbeState,
-    /// Indicates if a probe state was built in
-    /// the current frame
-    is_state: bool,
 }
 
 impl Probe {
@@ -80,12 +115,11 @@ impl Probe {
                 speed: config.probe_speed,
                 claim_delay: config.probe_claim_delay,
             },
+            state_handle: StateHandler::new(&id),
             policy: ProbePolicy::Farm,
             target: pos.clone(),
             pos: pos,
             move_dir: Point::new(0.0, 0.0),
-            current_state: ProbeState::from_id(id),
-            is_state: false,
             delayer_travel: Delayer::new(0.0),
             delayer_claim: Delayer::new(config.probe_claim_delay),
         }
@@ -95,34 +129,14 @@ impl Probe {
         self.pos.as_coord()
     }
 
-    /// Return current state \
-    /// In case is_state is true,
-    /// reset current state and create new ProbeState instance
-    pub fn flush_state(&mut self) -> Option<ProbeState> {
-        if !self.is_state {
-            return None;
-        }
-        let state = self.current_state.clone();
-        self.current_state = ProbeState::from_id(self.id);
-        self.is_state = false;
-        Some(state)
-    }
-
-    /// Return the current state
-    /// AND stores that there is a probe state
-    /// (see self.is_state)
-    fn mut_state(&mut self) -> &mut ProbeState {
-        self.is_state = true;
-        &mut self.current_state
-    }
-
     /// Return complete current probe state
     pub fn get_complete_state(&self) -> ProbeState {
         ProbeState {
-            id: Some(self.id),
+            id: self.id,
             death: None,
             pos: Some(self.pos.clone()),
             target: Some(self.target.as_coord()),
+            just_created: false,
         }
     }
 
@@ -145,7 +159,7 @@ impl Probe {
             let target = target.as_point();
             // in case the target has changed -> update current state
             if target != self.target {
-                self.mut_state().target = Some(target.as_coord());
+                self.state_handle.get_mut().target = Some(target.as_coord());
             }
             self.set_target(target);
         }
@@ -179,7 +193,7 @@ impl Probe {
     /// Claims neighbours tiles twice \
     /// Notify death in probe state
     fn explode(&mut self, player: &Player, ctx: &mut FrameContext) {
-        self.mut_state().death = Some(ProbeDeathCause::Exploded);
+        self.state_handle.get_mut().death = Some(ProbeDeathCause::Exploded);
         let coords = geometry::square(&self.get_coord(), 1);
         for coord in coords.iter() {
             ctx.map.claim_tile(player, coord);
@@ -212,8 +226,7 @@ impl Probe {
                 if self.is_target_reached(ctx) {
                     self.policy = ProbePolicy::Claim;
                     self.pos = self.target.clone();
-                    self.current_state.pos = Some(self.target.clone());
-                    self.is_state = true;
+                    self.state_handle.get_mut().pos = Some(self.target.clone());
                 }
             }
             ProbePolicy::Attack => {
@@ -227,6 +240,6 @@ impl Probe {
             }
         }
 
-        self.flush_state()
+        self.state_handle.flush(&self.id)
     }
 }

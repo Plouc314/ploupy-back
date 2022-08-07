@@ -83,7 +83,16 @@ pub struct FrameContext<'a> {
 }
 
 pub fn generate_unique_id() -> u128 {
-    return uuid::Uuid::new_v4().as_u128();
+    loop {
+        match uuid::Uuid::new_v4().as_u128() {
+            NOT_IDENTIFIABLE => {
+                continue;
+            }
+            id => {
+                return id;
+            }
+        }
+    }
 }
 
 /// Delayer
@@ -123,5 +132,107 @@ impl Delayer {
             return true;
         }
         false
+    }
+}
+
+/// Define type as identifiable
+pub trait Identifiable {
+    fn id(&self) -> u128;
+
+    /// Return if `other` is the same as self \
+    /// Note: Take `NOT_IDENTIFIABLE` into account when
+    /// comparing ids.
+    fn is(&self, other: &Self) -> bool {
+        let id = self.id();
+        id != NOT_IDENTIFIABLE && id == other.id()
+    }
+}
+
+/// Similar to NaN, will always be considered different
+/// from any other id
+pub const NOT_IDENTIFIABLE: u128 = 0;
+
+/// Define state type \
+/// Store state data (indented to contains partial attributes)
+pub trait State: Clone {
+    /// Metadata is what is passed to the constructor
+    type Metadata;
+
+    /// Create a new state instance
+    fn new(_metadata: &Self::Metadata) -> Self;
+
+    /// Merge (inplace) the state with another one (consumed)
+    fn merge(&mut self, state: Self);
+}
+
+/// Insert `state` in the `states` vector \
+/// In case the state already exists (as defined by `Identifiable`)
+/// in `states`: merge it with `state`, else push it to the vector
+pub fn state_vec_insert<T>(states: &mut Vec<T>, state: T)
+where
+    T: State + Identifiable,
+{
+    for current_state in states.iter_mut() {
+        if current_state.is(&state) {
+            current_state.merge(state);
+            return;
+        }
+    }
+    states.push(state);
+}
+
+/// State wrapper \
+/// Used to gradually build state
+pub struct StateHandler<T: State> {
+    state: T,
+    /// Indicates if a state was built in
+    /// the current frame
+    is_state: bool,
+}
+
+impl<T> StateHandler<T>
+where
+    T: State,
+{
+    /// Create new StateHandler instance
+    pub fn new(_metadata: &T::Metadata) -> Self {
+        StateHandler {
+            is_state: false,
+            state: T::new(_metadata),
+        }
+    }
+
+    /// Return the handler's current state \
+    /// Do NOT set `is_state` flag
+    pub fn get(&self) -> &T {
+        &self.state
+    }
+
+    /// Return the handler's current state \
+    /// Set `is_state` flag
+    pub fn get_mut(&mut self) -> &mut T {
+        self.is_state = true;
+        &mut self.state
+    }
+
+    /// Merge given state with current one
+    /// Set `is_state` flag
+    pub fn merge(&mut self, state: T) {
+        self.state.merge(state);
+        self.is_state = true;
+    }
+
+    /// If `is_state` flag is set:
+    /// return handler's current state,
+    /// else `None` \
+    /// Reset current state & `is_state` flag
+    pub fn flush(&mut self, _metadata: &T::Metadata) -> Option<T> {
+        if !self.is_state {
+            return None;
+        }
+        let state = self.state.clone();
+        self.state = T::new(_metadata);
+        self.is_state = false;
+        Some(state)
     }
 }

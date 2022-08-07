@@ -1,35 +1,71 @@
 use log;
 
+use crate::game::state_vec_insert;
+
 use super::{
-    core,
+    core::State,
     factory::{Factory, FactoryState},
     probe::{Probe, ProbeState},
-    Coord, Delayer, FactoryPolicy, FrameContext, GameConfig,
+    Coord, Delayer, FactoryDeathCause, FactoryPolicy, FrameContext, GameConfig, Identifiable, Map,
+    StateHandler,
 };
+
+#[derive(Clone, Debug)]
+pub enum PlayerDeathCause {
+    Defeated,
+    Resigned,
+}
 
 pub struct PlayerConfig {
     initial_money: f64,
     initial_n_probes: u32,
     base_income: f64,
     probe_price: f64,
+    factory_price: f64,
     factory_build_probe_delay: f64,
 }
 
 #[derive(Clone, Debug)]
 pub struct PlayerState {
     pub id: u128,
+    /// Only specified once, when the player dies
+    pub death: Option<PlayerDeathCause>,
     pub money: Option<f64>,
     pub income: Option<f64>,
     pub factories: Vec<FactoryState>,
 }
 
-impl PlayerState {
-    pub fn from_id(id: u128) -> Self {
+impl Identifiable for PlayerState {
+    fn id(&self) -> u128 {
+        self.id
+    }
+}
+
+impl State for PlayerState {
+    type Metadata = u128;
+
+    fn new(_metadata: &Self::Metadata) -> Self {
         PlayerState {
-            id: id,
+            id: *_metadata,
+            death: None,
             money: None,
             income: None,
             factories: Vec::new(),
+        }
+    }
+
+    fn merge(&mut self, state: Self) {
+        if let Some(death) = state.death {
+            self.death = Some(death);
+        }
+        if let Some(money) = state.money {
+            self.money = Some(money);
+        }
+        if let Some(income) = state.income {
+            self.income = Some(income);
+        }
+        for factory in state.factories {
+            state_vec_insert(&mut self.factories, factory);
         }
     }
 }
@@ -37,18 +73,11 @@ impl PlayerState {
 pub struct Player {
     pub id: u128,
     config: PlayerConfig,
+    state_handle: StateHandler<PlayerState>,
     money: f64,
     pub factories: Vec<Factory>,
     /// Delay to wait between two incomes
     delayer_income: Delayer,
-    /// Store potential player state at this frame
-    /// used to gradually build player state during
-    /// run() function (see mut_state)
-    /// Should not be dealt with directly
-    current_state: PlayerState,
-    /// Indicates if a player state was built in
-    /// the current frame
-    is_state: bool,
 }
 
 impl Player {
@@ -60,34 +89,21 @@ impl Player {
                 initial_n_probes: config.initial_n_probes,
                 base_income: config.base_income,
                 probe_price: config.probe_price,
+                factory_price: config.factory_price,
                 factory_build_probe_delay: config.factory_build_probe_delay,
             },
+            state_handle: StateHandler::new(&id),
             money: config.initial_money,
             factories: Vec::new(),
             delayer_income: Delayer::new(1.0),
-            current_state: PlayerState::from_id(id),
-            is_state: false,
         }
-    }
-
-    /// Return current state \
-    /// In case is_state is true,
-    /// reset current state and create new PlayerState instance
-    pub fn flush_state(&mut self) -> Option<PlayerState> {
-        if !self.is_state {
-            return None;
-        }
-        let state = self.current_state.clone();
-        self.current_state = PlayerState::from_id(self.id);
-        self.is_state = false;
-        Some(state)
     }
 
     /// Return complete current player state
     pub fn get_complete_state(&self) -> PlayerState {
-        println!("PLAYER COMPLETE STATE");
         let mut state = PlayerState {
             id: self.id,
+            death: None,
             money: Some(self.money),
             income: Some(0.0),
             factories: Vec::with_capacity(self.factories.len()),
@@ -98,51 +114,96 @@ impl Player {
         state
     }
 
+    /// Kill all player's factories \
+    /// Return their states (with death cause)
+    pub fn die(&self) -> Vec<FactoryState> {
+        let mut factory_states = Vec::with_capacity(self.factories.len());
+        for factory in self.factories.iter() {
+            let mut state = FactoryState::new(&factory.id);
+            state.death = Some(FactoryDeathCause::Scrapped);
+            state.probes = factory.die();
+            factory_states.push(state);
+        }
+        factory_states
+    }
+
     /// Create a new probe, set a target for the probe \
     /// Return the new probe state
     fn create_probe(&self, state: &mut ProbeState, ctx: &mut FrameContext) -> Option<Probe> {
-        println!("create probe: {:?}", state);
         if let Some(pos) = &state.pos {
             let mut probe = Probe::new(ctx.config, pos.clone());
             // set id
-            state.id = Some(probe.id);
+            state.id = probe.id;
             // set target
             if let Some(target) = ctx.map.get_probe_farm_target(self, &probe) {
                 probe.set_target(target.as_point());
                 state.target = Some(target);
             } else {
-                println!("No target found");
+                log::warn!(
+                    "[Player {:.3}] (create_probe) No target found",
+                    self.id.to_string()
+                );
             }
-            println!("done: {:?}", state);
             return Some(probe);
         }
-        println!("Invalid pos {:?}", &state.pos);
         None
     }
 
-    /// Create a new factory, add it to player's factories \
+    /// Create a new factory, add it to player's factories,
+    /// notify tile of new building. \
     /// Return the new factory state
-    pub fn create_factory(&mut self, pos: Coord, config: &GameConfig) -> FactoryState {
+    ///
+    /// Note:
+    /// - Do NOT care about player's money (see `build_factory` instead)
+    /// - Won't fail in case of invalid pos (tile just won't be notified)
+    pub fn create_factory(
+        &mut self,
+        pos: Coord,
+        map: &mut Map,
+        config: &GameConfig,
+    ) -> FactoryState {
         let factory = Factory::new(config, pos.clone());
-        let mut state = FactoryState::from_id(factory.id);
+
+        if let Some(tile) = map.get_mut_tile(&pos) {
+            tile.building_id = Some(factory.id);
+        }
+
+        let mut state = FactoryState::new(&factory.id);
         state.coord = Some(pos);
         self.factories.push(factory);
         state
     }
 
-    /// Kill a factory (if `factory_id` is valid) \
-    /// Return probe states of dead probes (see `Factory.die()`)
-    pub fn kill_factory(&mut self, factory_id: u128) -> Option<Vec<ProbeState>> {
-        let mut idx = None;
-        for (i, factory) in self.factories.iter_mut().enumerate() {
-            if factory.id == factory_id {
-                idx = Some(i);
-                break;
-            }
+    /// If player has enough money, create a new factory (see `create_factory`) \
+    /// Return if the new factory could be created
+    pub fn build_factory(&mut self, pos: Coord, map: &mut Map, config: &GameConfig) -> bool {
+        if self.money < self.config.factory_price {
+            return false;
         }
+        self.money -= self.config.factory_price;
+        self.state_handle.get_mut().money = Some(self.money);
+
+        let state = self.create_factory(pos, map, config);
+        state_vec_insert(&mut self.state_handle.get_mut().factories, state);
+
+        true
+    }
+
+    /// Kill a factory (if `factory_id` is valid) \
+    /// Return factory state
+    pub fn kill_factory(
+        &mut self,
+        factory_id: u128,
+        death_cause: FactoryDeathCause,
+    ) -> Option<FactoryState> {
+        let idx = self.factories.iter().position(|f| f.id == factory_id);
+
         if let Some(idx) = idx {
-            let mut factory = self.factories.remove(idx);
-            return Some(factory.die());
+            let factory = self.factories.remove(idx);
+            let mut state = FactoryState::new(&factory.id);
+            state.death = Some(death_cause);
+            state.probes = factory.die();
+            return Some(state);
         }
         None
     }
@@ -176,13 +237,14 @@ impl Player {
         self.money += income;
         let prediction = self.get_income_prediction(income);
 
-        self.current_state.money = Some(self.money);
-        self.current_state.income = Some(prediction);
+        self.state_handle.get_mut().money = Some(self.money);
+        self.state_handle.get_mut().income = Some(prediction);
     }
 
     /// run function
     pub fn run(&mut self, ctx: &mut FrameContext) -> Option<PlayerState> {
         log::debug!("[Player {:.3}] run...", self.id.to_string());
+
         let mut factories: Vec<Factory> = self.factories.drain(..).collect();
         let mut dead_factory_idxs = Vec::new();
         let mut is_money_change = false;
@@ -196,7 +258,7 @@ impl Player {
 
                 // create new probes
                 for probe_state in state.probes.iter_mut() {
-                    if probe_state.id.is_none() && self.money >= self.config.probe_price {
+                    if probe_state.just_created() && self.money >= self.config.probe_price {
                         if let Some(probe) = self.create_probe(probe_state, ctx) {
                             is_money_change = true;
                             self.money -= self.config.probe_price;
@@ -205,8 +267,7 @@ impl Player {
                     }
                 }
 
-                self.is_state = true;
-                self.current_state.factories.push(state);
+                state_vec_insert(&mut self.state_handle.get_mut().factories, state);
             }
         }
 
@@ -221,9 +282,9 @@ impl Player {
         self.update_money(ctx);
 
         if is_money_change {
-            self.current_state.money = Some(self.money);
+            self.state_handle.get_mut().money = Some(self.money);
         }
 
-        self.flush_state()
+        self.state_handle.flush(&self.id)
     }
 }

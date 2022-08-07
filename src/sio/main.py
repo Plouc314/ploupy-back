@@ -236,10 +236,8 @@ async def action_resign_game(us: _s.User, model: actions.ResignGame) -> _c.Respo
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        gs.game.action_resign_game(player)
+        gs.game.action_resign_game(us.user.uid)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
 
@@ -257,14 +255,10 @@ async def action_build_factory(us: _s.User, model: actions.BuildFactory) -> _c.R
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_build_factory(player, model.coord)
+        gs.game.action_build_factory(us.user.uid, model.coord)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("build_factory", response.json(), to=gs.gid)
 
     return _c.Response().json()
 

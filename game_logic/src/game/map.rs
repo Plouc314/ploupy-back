@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use super::{core, core::Coord, geometry, player::Player, probe::Probe, random, GameConfig};
+use super::{
+    core, core::Coord, geometry, player::Player, probe::Probe, random, state_vec_insert,
+    GameConfig, GameState, Identifiable, State, StateHandler,
+};
 
 use log::warn;
 
@@ -18,14 +21,32 @@ pub struct MapState {
     dead_building: HashMap<u128, Vec<u128>>,
 }
 
-impl MapState {
-    pub fn new() -> Self {
+impl State for MapState {
+    type Metadata = ();
+
+    fn new(_metadata: &Self::Metadata) -> Self {
         MapState {
             tiles: Vec::new(),
             dead_building: HashMap::new(),
         }
     }
 
+    fn merge(&mut self, state: Self) {
+        for tile in state.tiles.iter() {
+            state_vec_insert(&mut self.tiles, tile.clone());
+        }
+
+        for (owner, mut buildings) in state.dead_building {
+            if let Some(ids) = self.dead_building.get_mut(&owner) {
+                ids.append(&mut buildings);
+            } else {
+                self.dead_building.insert(owner, buildings);
+            }
+        }
+    }
+}
+
+impl MapState {
     /// Return `dead_building` attribute
     pub fn get_dead_building(&self) -> &HashMap<u128, Vec<u128>> {
         &self.dead_building
@@ -34,15 +55,8 @@ impl MapState {
 
 pub struct Map {
     config: MapConfig,
+    pub state_handle: StateHandler<MapState>,
     tiles: Vec<Vec<Tile>>,
-    /// Store potential map state at this frame
-    /// used to gradually build map state during
-    /// run() functions (executed by all Runnable entities)
-    /// Should not be dealt with directly, or see `is_state`
-    current_state: MapState,
-    /// Indicates if a probe state was built in
-    /// the current frame
-    is_state: bool,
 }
 
 impl Map {
@@ -63,9 +77,8 @@ impl Map {
                 max_occupation: config.max_occupation,
                 income_rate: config.income_rate,
             },
+            state_handle: StateHandler::new(&()),
             tiles: tiles,
-            current_state: MapState::new(),
-            is_state: false,
         };
     }
 
@@ -87,14 +100,6 @@ impl Map {
             .get_mut(coord.y as usize)
     }
 
-    /// Return the current state
-    /// AND stores that there is a map state
-    /// (see self.is_state)
-    fn mut_state(&mut self) -> &mut MapState {
-        self.is_state = true;
-        &mut self.current_state
-    }
-
     /// Return the income of all his owned tiles to one player
     pub fn get_player_income(&self, player: &Player) -> f64 {
         let mut income = 0.0;
@@ -106,19 +111,6 @@ impl Map {
             }
         }
         income
-    }
-
-    /// Return current state \
-    /// In case is_state is true,
-    /// reset current state and create new MapState instance
-    pub fn flush_state(&mut self) -> Option<MapState> {
-        if !self.is_state {
-            return None;
-        }
-        let state = self.current_state.clone();
-        self.current_state = MapState::new();
-        self.is_state = false;
-        Some(state)
     }
 
     /// Return complete current map state
@@ -278,15 +270,16 @@ impl Map {
                 }
             }
         }
-        let state = TileState::from_tile(tile);
-        self.mut_state().tiles.push(state);
+        let state = TileState::new(&tile);
+        state_vec_insert(&mut self.state_handle.get_mut().tiles, state);
 
         // add building death to current state
         if let Some((owner, building)) = deaths {
-            if let Some(ids) = self.current_state.dead_building.get_mut(&owner) {
+            if let Some(ids) = self.state_handle.get_mut().dead_building.get_mut(&owner) {
                 ids.push(building);
             } else {
-                self.current_state
+                self.state_handle
+                    .get_mut()
                     .dead_building
                     .insert(owner, vec![building]);
             }
@@ -298,6 +291,7 @@ impl Map {
 
 struct TileConfig {
     max_occupation: u32,
+    building_occupation_min: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -308,13 +302,33 @@ pub struct TileState {
     pub owner_id: Option<u128>,
 }
 
-impl TileState {
-    pub fn from_tile(tile: &Tile) -> Self {
+impl Identifiable for TileState {
+    fn id(&self) -> u128 {
+        self.id
+    }
+}
+
+impl State for TileState {
+    type Metadata = Tile;
+
+    fn new(_metadata: &Self::Metadata) -> Self {
         TileState {
-            id: tile.id,
+            id: _metadata.id,
             coord: None, // only specify coord on map creation
-            occupation: Some(tile.occupation),
-            owner_id: tile.owner_id,
+            occupation: Some(_metadata.occupation),
+            owner_id: _metadata.owner_id,
+        }
+    }
+
+    fn merge(&mut self, state: Self) {
+        if let Some(coord) = state.coord {
+            self.coord = Some(coord);
+        }
+        if let Some(occupation) = state.occupation {
+            self.occupation = Some(occupation);
+        }
+        if let Some(owner_id) = state.owner_id {
+            self.owner_id = Some(owner_id);
         }
     }
 }
@@ -335,6 +349,7 @@ impl Tile {
             id: core::generate_unique_id(),
             config: TileConfig {
                 max_occupation: config.max_occupation,
+                building_occupation_min: config.building_occupation_min,
             },
             coord: coord,
             occupation: 0,
@@ -351,6 +366,13 @@ impl Tile {
             occupation: Some(self.occupation),
             owner_id: self.owner_id,
         }
+    }
+
+    /// Return if the given player can build on tile
+    pub fn can_build(&self, player: &Player) -> bool {
+        self.building_id.is_none()
+            && self.is_owned_by(player)
+            && self.occupation >= self.config.building_occupation_min
     }
 
     /// Return if the tile is owned by the given player

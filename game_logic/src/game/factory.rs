@@ -1,9 +1,9 @@
 use log;
 
-use super::core::{Coord, FrameContext};
+use super::core::{state_vec_insert, Coord, FrameContext, State};
 use super::player::Player;
 use super::probe::{Probe, ProbeDeathCause, ProbeState};
-use super::{core, geometry, Delayer, GameConfig};
+use super::{core, geometry, Delayer, GameConfig, Identifiable, StateHandler};
 
 pub enum FactoryPolicy {
     Expand,
@@ -14,6 +14,7 @@ pub enum FactoryPolicy {
 #[derive(Clone, Debug)]
 pub enum FactoryDeathCause {
     Conquered,
+    Scrapped,
 }
 
 struct FactoryConfig {
@@ -31,13 +32,33 @@ pub struct FactoryState {
     pub probes: Vec<ProbeState>,
 }
 
-impl FactoryState {
-    pub fn from_id(id: u128) -> Self {
+impl Identifiable for FactoryState {
+    fn id(&self) -> u128 {
+        self.id
+    }
+}
+
+impl State for FactoryState {
+    type Metadata = u128;
+
+    fn new(_metadata: &Self::Metadata) -> Self {
         FactoryState {
-            id: id,
+            id: *_metadata,
             death: None,
             coord: None,
             probes: Vec::new(),
+        }
+    }
+
+    fn merge(&mut self, state: Self) {
+        if let Some(death) = state.death {
+            self.death = Some(death);
+        }
+        if let Some(coord) = state.coord {
+            self.coord = Some(coord);
+        }
+        for probe in state.probes {
+            state_vec_insert(&mut self.probes, probe);
         }
     }
 }
@@ -45,6 +66,7 @@ impl FactoryState {
 pub struct Factory {
     pub id: u128,
     config: FactoryConfig,
+    state_handle: StateHandler<FactoryState>,
     policy: FactoryPolicy,
     pub pos: Coord,
     probes: Vec<Probe>,
@@ -54,14 +76,6 @@ pub struct Factory {
     delayer_produce: Delayer,
     /// Delay to wait between expand step
     delayer_expand: Delayer,
-    /// Store potential factory state at this frame
-    /// used to gradually build factory state during
-    /// run() function
-    /// Should not be dealt with directly
-    current_state: FactoryState,
-    /// Indicates if a factory state was built in
-    /// the current frame
-    is_state: bool,
 }
 
 impl Factory {
@@ -74,33 +88,19 @@ impl Factory {
                 build_probe_delay: config.factory_build_probe_delay,
                 probe_maintenance_costs: config.probe_maintenance_costs,
             },
+            state_handle: StateHandler::new(&id),
             policy: FactoryPolicy::Expand,
             pos: pos,
             probes: Vec::new(),
             expand_step: 0,
             delayer_produce: Delayer::new(config.factory_build_probe_delay),
             delayer_expand: Delayer::new(0.5),
-            current_state: FactoryState::from_id(id),
-            is_state: false,
         }
     }
 
     /// factory policy getter
     pub fn get_policy(&self) -> &FactoryPolicy {
         &self.policy
-    }
-
-    /// Return current state \
-    /// In case is_state is true,
-    /// reset current state and create new FactoryState instance
-    pub fn flush_state(&mut self) -> Option<FactoryState> {
-        if !self.is_state {
-            return None;
-        }
-        let state = self.current_state.clone();
-        self.current_state = FactoryState::from_id(self.id);
-        self.is_state = false;
-        Some(state)
     }
 
     /// Return complete current factory state
@@ -124,12 +124,7 @@ impl Factory {
 
     /// Create the probe state of a new probe
     fn create_probe_state(&self) -> ProbeState {
-        ProbeState {
-            id: None,
-            death: None,
-            pos: Some(self.pos.as_point()),
-            target: None,
-        }
+        ProbeState::create_created_state(self.pos.as_point())
     }
 
     /// Return factory income (costs)
@@ -139,10 +134,10 @@ impl Factory {
 
     /// Kill all factory's probes \
     /// Return their states (with death cause)
-    pub fn die(&mut self) -> Vec<ProbeState> {
+    pub fn die(&self) -> Vec<ProbeState> {
         let mut probe_states = Vec::with_capacity(self.probes.len());
-        for probe in self.probes.iter_mut() {
-            let mut state = ProbeState::from_id(probe.id);
+        for probe in self.probes.iter() {
+            let mut state = ProbeState::new(&probe.id);
             state.death = Some(ProbeDeathCause::Scrapped);
             probe_states.push(state);
         }
@@ -158,7 +153,7 @@ impl Factory {
         self.expand_step += 1;
         if self.expand_step == 4 {
             self.expand_step = 0;
-            self.policy = FactoryPolicy::Wait;
+            self.policy = FactoryPolicy::Produce;
             return;
         }
         let coords = geometry::square(&self.pos, self.expand_step);
@@ -179,16 +174,16 @@ impl Factory {
             return;
         }
         if self.delayer_produce.wait(ctx) {
-            self.current_state.probes.push(self.create_probe_state());
-            self.is_state = true;
+            let state = self.create_probe_state();
+            self.state_handle.get_mut().probes.push(state);
         }
     }
 
     /// Switch to Produce policy when having less than `max_probe`
     fn wait(&mut self, ctx: &mut FrameContext) {
-        // if self.probes.len() < self.config.max_probe as usize {
-        //     self.policy = FactoryPolicy::Produce;
-        // }
+        if self.probes.len() < self.config.max_probe as usize {
+            self.policy = FactoryPolicy::Produce;
+        }
     }
 
     /// run function
@@ -218,8 +213,7 @@ impl Factory {
                     dead_probe_idxs.push(i);
                 }
 
-                self.current_state.probes.push(state);
-                self.is_state = true;
+                state_vec_insert(&mut self.state_handle.get_mut().probes, state);
             }
         }
 
@@ -228,6 +222,6 @@ impl Factory {
             self.probes.remove(*idx);
         }
 
-        self.flush_state()
+        self.state_handle.flush(&self.id)
     }
 }

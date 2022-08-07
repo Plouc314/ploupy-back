@@ -1,12 +1,5 @@
 mod game;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::rc::Weak;
-
-use game::iter_vortex;
-use game::square;
-use game::square_without_origin;
 use game::Coord;
 use game::Game;
 use game::GameConfig;
@@ -26,20 +19,6 @@ fn display(origin: &Coord, coords: &Vec<Coord>) {
         println!();
     }
 }
-
-fn modify<'a>(a: Weak<RefCell<i32>>) {
-    let a = &*a.upgrade().unwrap();
-    *a.borrow_mut() += 2;
-    println!("{}", a.borrow());
-}
-
-fn ref_stuff() {
-    let a = Rc::new(RefCell::new(2));
-    println!("a = {}", (*a).borrow());
-    modify(Rc::downgrade(&a));
-    println!("a = {}", (*a).borrow());
-}
-
 fn test_game() {
     let config = GameConfig {
         dim: Coord { x: 10, y: 10 },
@@ -72,6 +51,4 @@ fn test_game() {
     println!("End run game.");
 }
 
-fn main() {
-    test_game();
-}
+fn main() {}

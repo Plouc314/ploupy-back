@@ -1,10 +1,8 @@
-use std::ops::{Add, Sub};
-
 use super::game::{
     Coord, FactoryDeathCause, FactoryState, GameConfig, GameState, MapState, PlayerState, Point,
-    ProbeDeathCause, ProbeState, TileState,
+    ProbeDeathCause, ProbeState, TileState, NOT_IDENTIFIABLE,
 };
-use pyo3::{exceptions, types::PyDict, FromPyObject, PyClass, PyErr, PyResult, Python};
+use pyo3::{exceptions, types::PyDict, FromPyObject, PyErr, PyResult, Python};
 
 pub trait AsDict<'a> {
     fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict>;
@@ -113,23 +111,18 @@ impl<'a> AsDict<'a> for ProbeState {
     fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
         let dict = PyDict::new(_py);
         match self.id {
-            None => {
+            NOT_IDENTIFIABLE => {
                 // In case the state doesn't have an id (as for new probe)
                 // raise a python error (cause why not)
                 return Err(PyErr::new::<exceptions::PyValueError, _>("Missing id"));
             }
-            Some(id) => {
+            id => {
                 dict.set_item("id", id)?;
             }
         }
 
         if let Some(death) = &self.death {
-            let death = match death {
-                ProbeDeathCause::Exploded => "Exploded",
-                ProbeDeathCause::Shot => "Shot",
-                ProbeDeathCause::Scrapped => "Scrapped",
-            };
-            dict.set_item("death", death)?;
+            dict.set_item("death", format!("{:?}", death))?;
         }
 
         set_dict_item(_py, dict, "pos", &self.pos)?;
@@ -145,10 +138,7 @@ impl<'a> AsDict<'a> for FactoryState {
         dict.set_item("id", self.id)?;
 
         if let Some(death) = &self.death {
-            let death = match death {
-                FactoryDeathCause::Conquered => "Conquered",
-            };
-            dict.set_item("death", death)?;
+            dict.set_item("death", format!("{:?}", death))?;
         }
 
         set_dict_item(_py, dict, "coord", &self.coord)?;
@@ -163,6 +153,11 @@ impl<'a> AsDict<'a> for PlayerState {
         let dict = PyDict::new(_py);
 
         dict.set_item("id", self.id)?;
+
+        if let Some(death) = &self.death {
+            dict.set_item("death", format!("{:?}", death))?;
+        }
+
         set_item(dict, "money", &self.money)?;
         set_item(dict, "income", &self.income)?;
         set_vec_dict_item(_py, dict, "factories", &self.factories)?;

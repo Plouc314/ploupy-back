@@ -22,12 +22,14 @@ class GameRS:
         self.users = users
         self.job_manager = job_manager
         self.config = config
-        self._game = gl.Game([abs(hash(u.uid)) for u in users], config.dict())
+        # map: python id -> rust id
+        self._ids_map = {u.uid: abs(hash(u.uid)) for u in users}
+        self._game = gl.Game(list(self._ids_map.values()), config.dict())
 
         job = self.job_manager.make_job("game_state", self.job_run)
         job.start()
 
-    async def job_run(self):
+    async def job_run(self, jb: JobManager):
         while True:
             await self.job_manager.sleep(1 / 60)
             state = self._game.run()
@@ -37,14 +39,17 @@ class GameRS:
             self._cast_rs_model(state)
             yield _g.GameState(**state)
 
-    def _get_username(self, id: int) -> str:
+    def _get_user(self, rid: int) -> _c.User:
+        """
+        Return the user with the given rust id
+        """
         for u in self.users:
-            if abs(hash(u.uid)) == id:
-                return u.username
+            if self._ids_map[u.uid] == rid:
+                return u
 
     def _cast_rs_model(self, raw: dict):
         for ps in raw["players"]:
-            ps["username"] = self._get_username(ps.pop("id"))
+            ps["username"] = self._get_user(ps.pop("id")).username
             ps["alive"] = not ps.get("death", None)
             probe_states = []
             for fs in ps["factories"]:
@@ -58,7 +63,37 @@ class GameRS:
         if _map is not None:
             for _tile in _map["tiles"]:
                 if "owner_id" in _tile.keys():
-                    _tile["owner"] = self._get_username(_tile.pop("owner_id"))
+                    _tile["owner"] = self._get_user(_tile.pop("owner_id")).username
+
+    def action_resign_game(self, uid: str) -> None:
+        """
+        Make one player die
+
+        Raise: ActionException
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_resign_game(rid)
+        except ValueError as e:
+            raise ActionException(str(e))
+
+    def action_build_factory(self, uid: str, coord: _c.Point) -> None:
+        """
+        Build a factory at the given coord for the given player is possible
+
+        Raise: ActionException
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_build_factory(rid, int(coord.x), int(coord.y))
+        except ValueError as e:
+            raise ActionException(str(e))
 
     @property
     def model(self) -> _g.Game:

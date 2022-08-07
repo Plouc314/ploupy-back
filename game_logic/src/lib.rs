@@ -1,12 +1,9 @@
 mod game;
 mod pybindings;
 
-use std::env;
-
 use env_logger;
-use game::Tile;
 use pybindings::{AsDict, FromDict};
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{exceptions, prelude::*, types::PyDict};
 
 #[pyclass]
 struct Game {
@@ -34,6 +31,26 @@ impl Game {
         match state {
             None => Ok(None),
             Some(state) => Ok(Some(state.to_dict(_py)?)),
+        }
+    }
+
+    pub fn action_resign_game<'a>(&mut self, _py: Python<'a>, player_id: u128) -> PyResult<()> {
+        match self.game.resign_game(player_id) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
+        }
+    }
+
+    pub fn action_build_factory<'a>(
+        &mut self,
+        _py: Python<'a>,
+        player_id: u128,
+        coord_x: i32,
+        coord_y: i32,
+    ) -> PyResult<()> {
+        match self.game.create_factory(player_id, coord_x, coord_y) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
         }
     }
 }

@@ -3,7 +3,8 @@ use super::{
     map::{Map, MapState},
     player::{Player, PlayerState},
     probe::Probe,
-    Coord, FactoryDeathCause, FactoryState, GameConfig, ProbeState,
+    state_vec_insert, Coord, FactoryDeathCause, FactoryState, GameConfig, Identifiable,
+    PlayerDeathCause, ProbeState, State, StateHandler,
 };
 use std::cmp;
 
@@ -13,58 +14,53 @@ pub struct GameState {
     pub players: Vec<PlayerState>,
 }
 
-impl GameState {
-    pub fn new() -> Self {
+impl State for GameState {
+    type Metadata = ();
+
+    fn new(_metadata: &Self::Metadata) -> Self {
         GameState {
             map: None,
             players: Vec::new(),
+        }
+    }
+
+    fn merge(&mut self, state: Self) {
+        match (&mut self.map, state.map) {
+            (Some(map), Some(other_map)) => {
+                map.merge(other_map);
+            }
+            (None, Some(other_map)) => {
+                self.map = Some(other_map);
+            }
+            _ => {}
+        }
+        for player in state.players {
+            state_vec_insert(&mut self.players, player);
         }
     }
 }
 
 pub struct Game {
     config: GameConfig,
+    state_handle: StateHandler<GameState>,
     map: Map,
     players: Vec<Player>,
-    /// Store potential game state at this frame
-    /// used to gradually build game state during
-    /// run() function (see mut_state)
-    /// Should not be dealt with directly
-    current_state: GameState,
-    /// Indicates if a game state was built in
-    /// the current frame
-    is_state: bool,
 }
 
 impl Game {
     pub fn new(player_ids: Vec<u128>, config: GameConfig) -> Self {
         let mut game = Game {
             map: Map::new(&config),
+            state_handle: StateHandler::new(&()),
             config: config,
             players: Vec::new(),
-            current_state: GameState::new(),
-            is_state: false,
         };
         game.create_players(player_ids);
         game
     }
 
-    /// Return current state \
-    /// In case is_state is true,
-    /// reset current state and create new GameState instance
-    pub fn flush_state(&mut self) -> Option<GameState> {
-        if !self.is_state {
-            return None;
-        }
-        let state = self.current_state.clone();
-        self.current_state = GameState::new();
-        self.is_state = false;
-        Some(state)
-    }
-
     /// Return complete current game state
     pub fn get_complete_state(&self) -> GameState {
-        println!("GET COMPLETE STATE");
         let mut state = GameState {
             players: Vec::with_capacity(self.players.len()),
             map: Some(self.map.get_complete_state()),
@@ -77,12 +73,7 @@ impl Game {
 
     /// Return mut ref of Player with given id, if found
     fn get_player_mut(&mut self, id: u128) -> Option<&mut Player> {
-        for player in self.players.iter_mut() {
-            if player.id == id {
-                return Some(player);
-            }
-        }
-        None
+        self.players.iter_mut().find(|p| p.id == id)
     }
 
     /// Return suitable start positions for n players
@@ -111,11 +102,11 @@ impl Game {
 
     /// Create player \
     /// Create initial conditions (factory/probes)
-    fn create_player(&self, id: u128, pos: Coord) -> Player {
+    fn create_player(&mut self, id: u128, pos: Coord) -> Player {
         // create player
         let mut player = Player::new(id, &self.config);
-        // create factory
-        player.create_factory(pos.clone(), &self.config);
+        // create initial factory
+        player.create_factory(pos.clone(), &mut self.map, &self.config);
 
         // create initial probes
         for _ in 0..self.config.initial_n_probes {
@@ -129,18 +120,22 @@ impl Game {
         player
     }
 
-    /// Update player state with given factory states
-    /// In case player state doesn't already exists, create it
-    fn update_player_state(&mut self, player_id: u128, mut factory_states: Vec<FactoryState>) {
-        for player_state in self.current_state.players.iter_mut() {
-            if player_state.id == player_id {
-                player_state.factories.append(&mut factory_states);
-                return;
-            }
+    /// Kill a player (if `player_id` is valid) \
+    /// Return player state
+    pub fn kill_player(
+        &mut self,
+        player_id: u128,
+        death_cause: PlayerDeathCause,
+    ) -> Option<PlayerState> {
+        let idx = self.players.iter().position(|p| p.id == player_id);
+        if let Some(idx) = idx {
+            let player = self.players.remove(idx);
+            let mut state = PlayerState::new(&player_id);
+            state.death = Some(death_cause);
+            state.factories = player.die();
+            return Some(state);
         }
-        let mut player_state = PlayerState::from_id(player_id);
-        player_state.factories.append(&mut factory_states);
-        self.current_state.players.push(player_state);
+        None
     }
 
     /// Kill all building marked has dead by map
@@ -148,20 +143,19 @@ impl Game {
     fn handle_map_dead_building(&mut self, map_state: &MapState) {
         for (player_id, dead_ids) in map_state.get_dead_building().iter() {
             // collect all death states
-            let mut factory_states = Vec::new();
             if let Some(player) = self.get_player_mut(*player_id) {
+                let mut state = PlayerState::new(player_id);
                 for id in dead_ids.iter() {
                     // try kill factory (will later be turret too)
-                    if let Some(mut probes) = player.kill_factory(*id) {
+                    if let Some(factory_state) =
+                        player.kill_factory(*id, FactoryDeathCause::Conquered)
+                    {
                         // if it could be killed then it was a factory
-                        let mut factory_state = FactoryState::from_id(*id);
-                        factory_state.death = Some(FactoryDeathCause::Conquered);
-                        factory_state.probes.append(&mut probes);
-                        factory_states.push(factory_state);
+                        state.factories.push(factory_state);
                     }
                 }
+                state_vec_insert(&mut self.state_handle.get_mut().players, state);
             }
-            self.update_player_state(*player_id, factory_states);
         }
     }
 
@@ -175,17 +169,64 @@ impl Game {
         for player in self.players.iter_mut() {
             let state = player.run(&mut ctx);
             if let Some(state) = state {
-                self.current_state.players.push(state);
-                self.is_state = true;
+                state_vec_insert(&mut self.state_handle.get_mut().players, state);
             }
         }
 
-        if let Some(map_state) = self.map.flush_state() {
+        if let Some(map_state) = self.map.state_handle.flush(&()) {
             self.handle_map_dead_building(&map_state);
-            self.current_state.map = Some(map_state);
-            self.is_state = true;
+            self.state_handle.get_mut().map = Some(map_state);
         }
 
-        self.flush_state()
+        self.state_handle.flush(&())
+    }
+}
+
+// Actions block
+impl Game {
+    pub fn resign_game(&mut self, player_id: u128) -> Result<(), String> {
+        let state = match self.kill_player(player_id, PlayerDeathCause::Resigned) {
+            Some(state) => state,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        // insert player state into current state
+        state_vec_insert(&mut self.state_handle.get_mut().players, state);
+        Ok(())
+    }
+
+    pub fn create_factory(
+        &mut self,
+        player_id: u128,
+        coord_x: i32,
+        coord_y: i32,
+    ) -> Result<(), String> {
+        let coord = Coord::new(coord_x, coord_y);
+        let tile = match self.map.get_tile(&coord) {
+            Some(tile) => tile,
+            None => {
+                return Err(format!("Tile coordinate is invalid ({:?})", &coord));
+            }
+        };
+
+        let player = match self.players.iter_mut().find(|p| p.id == player_id) {
+            Some(player) => player,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        if !tile.can_build(player) {
+            return Err(String::from("Cannot build on tile"));
+        }
+
+        // actually build the factory
+        if !player.build_factory(coord, &mut self.map, &self.config) {
+            return Err(format!("Not enough money (<{})", self.config.factory_price));
+        }
+
+        Ok(())
     }
 }
