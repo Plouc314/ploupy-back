@@ -1,4 +1,5 @@
 from functools import partial
+import time
 from typing import Callable
 import numpy as np
 
@@ -30,14 +31,24 @@ class GameRS:
         job.start()
 
     async def job_run(self, jb: JobManager):
+        ct = time.perf_counter()
         while True:
             await self.job_manager.sleep(1 / 60)
-            state = self._game.run()
+            dt = time.perf_counter() - ct
+            state = self._game.run(dt)
+            ct = time.perf_counter()
 
             if state is None:
                 continue
             self._cast_rs_model(state)
             yield _g.GameState(**state)
+
+    def is_player(self, uid: str) -> bool:
+        """
+        Return the if the user with `uid` is part of the
+        players in the game
+        """
+        return uid in self._ids_map.keys()
 
     def _get_user(self, rid: int) -> _c.User:
         """
@@ -92,6 +103,49 @@ class GameRS:
 
         try:
             self._game.action_build_factory(rid, int(coord.x), int(coord.y))
+        except ValueError as e:
+            raise ActionException(str(e))
+
+    def action_move_probes(self, uid: str, ids: list[str], target: _c.Point) -> None:
+        """
+        Change the target of the probes with the given `ids`
+
+        Raise: ActionException
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_move_probes(
+                rid, [int(id) for id in ids], int(target.x), int(target.y)
+            )
+        except ValueError as e:
+            raise ActionException(str(e))
+
+    def action_explode_probes(self, uid: str, ids: list[str]) -> None:
+        """
+        Explode the probes with the given `ids`
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_explode_probes(rid, [int(id) for id in ids])
+        except ValueError as e:
+            raise ActionException(str(e))
+
+    def action_probes_attack(self, uid: str, ids: list[str]) -> None:
+        """
+        Make the probes with the given `ids` attack the opponents
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_probes_attack(rid, [int(id) for id in ids])
         except ValueError as e:
             raise ActionException(str(e))
 

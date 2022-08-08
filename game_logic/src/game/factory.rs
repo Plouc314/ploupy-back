@@ -122,6 +122,11 @@ impl Factory {
         self.probes.push(probe);
     }
 
+    /// Return the probe with the given id, if it exists
+    pub fn get_mut_probe_by_id(&mut self, probe_id: u128) -> Option<&mut Probe> {
+        self.probes.iter_mut().find(|p| p.id == probe_id)
+    }
+
     /// Create the probe state of a new probe
     fn create_probe_state(&self) -> ProbeState {
         ProbeState::create_created_state(self.pos.as_point())
@@ -146,7 +151,7 @@ impl Factory {
 
     /// Claim tiles next to the factory
     /// When done, switch to Produce policy
-    fn expand(&mut self, player: &Player, ctx: &mut FrameContext) {
+    fn expand(&mut self, player_id: u128, ctx: &mut FrameContext) {
         if !self.delayer_expand.wait(ctx) {
             return;
         }
@@ -158,7 +163,7 @@ impl Factory {
         }
         let coords = geometry::square(&self.pos, self.expand_step);
         for coord in coords.iter() {
-            ctx.map.claim_tile(player, coord);
+            ctx.map.claim_tile(player_id, coord);
         }
     }
 
@@ -195,7 +200,7 @@ impl Factory {
         );
         match self.policy {
             FactoryPolicy::Expand => {
-                self.expand(player, ctx);
+                self.expand(player.id, ctx);
             }
             FactoryPolicy::Produce => {
                 self.produce(ctx);

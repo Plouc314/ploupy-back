@@ -25,8 +25,8 @@ impl Game {
         self.game.get_complete_state().to_dict(_py)
     }
 
-    pub fn run<'a>(&mut self, _py: Python<'a>) -> PyResult<Option<&'a PyDict>> {
-        let state = self.game.run();
+    pub fn run<'a>(&mut self, _py: Python<'a>, dt: f64) -> PyResult<Option<&'a PyDict>> {
+        let state = self.game.run(dt);
 
         match state {
             None => Ok(None),
@@ -49,6 +49,44 @@ impl Game {
         coord_y: i32,
     ) -> PyResult<()> {
         match self.game.create_factory(player_id, coord_x, coord_y) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
+        }
+    }
+
+    pub fn action_move_probes<'a>(
+        &mut self,
+        _py: Python<'a>,
+        player_id: u128,
+        ids: Vec<u128>,
+        target_x: i32,
+        target_y: i32,
+    ) -> PyResult<()> {
+        match self.game.move_probes(player_id, ids, target_x, target_y) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
+        }
+    }
+
+    pub fn action_explode_probes<'a>(
+        &mut self,
+        _py: Python<'a>,
+        player_id: u128,
+        ids: Vec<u128>,
+    ) -> PyResult<()> {
+        match self.game.explode_probes(player_id, ids) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
+        }
+    }
+
+    pub fn action_probes_attack<'a>(
+        &mut self,
+        _py: Python<'a>,
+        player_id: u128,
+        ids: Vec<u128>,
+    ) -> PyResult<()> {
+        match self.game.probes_attack(player_id, ids) {
             Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
             Ok(v) => Ok(v),
         }

@@ -105,7 +105,7 @@ impl Map {
         let mut income = 0.0;
         for col in self.tiles.iter() {
             for tile in col.iter() {
-                if tile.is_owned_by(player) {
+                if tile.is_owned_by(player.id) {
                     income += tile.occupation as f64 * self.config.income_rate;
                 }
             }
@@ -150,7 +150,7 @@ impl Map {
             return false;
         }
 
-        if !tile.is_owned_by(player) {
+        if !tile.is_owned_by(player.id) {
             // check if tile occupied by an other player
             if tile.occupation > 3 {
                 return false;
@@ -158,7 +158,7 @@ impl Map {
                 // assert that tile is not isolated
                 let neighbours = self.get_neighbour_tiles(tile, 1);
                 for neighbour in neighbours.iter() {
-                    if neighbour.is_owned_by(player) {
+                    if neighbour.is_owned_by(player.id) {
                         return true;
                     }
                 }
@@ -208,14 +208,14 @@ impl Map {
     }
 
     /// Return a target for the probe to attack
-    pub fn get_probe_attack_target(&self, player: &Player, probe: &Probe) -> Option<Coord> {
+    pub fn get_probe_attack_target(&self, player_id: u128, probe: &Probe) -> Option<Coord> {
         let mut target_tile: Option<&Tile> = None;
 
         let mut idx = 0;
 
         for coord in geometry::iter_vortex(&probe.get_coord()) {
             if let Some(tile) = self.get_tile(&coord) {
-                if tile.is_owned_by_opponent_of(player) {
+                if tile.is_owned_by_opponent_of(player_id) {
                     target_tile = Some(tile);
                     break;
                 }
@@ -230,7 +230,7 @@ impl Map {
         let mut tiles = self.get_neighbour_tiles(&target_tile.unwrap(), 2);
         random::shuffle_vec(&mut tiles);
         for tile in tiles {
-            if tile.is_owned_by_opponent_of(player) {
+            if tile.is_owned_by_opponent_of(player_id) {
                 return Some(tile.coord.clone());
             }
         }
@@ -240,7 +240,7 @@ impl Map {
     /// Claim the tile at the coordinate of the probe \
     /// Store the tile state, potential building death in current state \
     /// Return if it could be done
-    pub fn claim_tile(&mut self, player: &Player, coord: &Coord) -> bool {
+    pub fn claim_tile(&mut self, player_id: u128, coord: &Coord) -> bool {
         let tile = self.get_mut_tile(coord);
         let tile = match tile {
             None => {
@@ -252,10 +252,10 @@ impl Map {
         let mut deaths: Option<(u128, u128)> = None;
         match tile.owner_id {
             None => {
-                tile.set_owner(player);
+                tile.set_owner(player_id);
             }
             Some(owner_id) => {
-                if owner_id == player.id {
+                if owner_id == player_id {
                     tile.incr_occupation();
                 } else {
                     tile.decr_occupation();
@@ -371,30 +371,30 @@ impl Tile {
     /// Return if the given player can build on tile
     pub fn can_build(&self, player: &Player) -> bool {
         self.building_id.is_none()
-            && self.is_owned_by(player)
+            && self.is_owned_by(player.id)
             && self.occupation >= self.config.building_occupation_min
     }
 
     /// Return if the tile is owned by the given player
-    pub fn is_owned_by(&self, player: &Player) -> bool {
+    pub fn is_owned_by(&self, player_id: u128) -> bool {
         match self.owner_id {
             None => false,
-            Some(id) => id == player.id,
+            Some(id) => id == player_id,
         }
     }
 
     /// Return if the tile is owned someone else than `player`
-    pub fn is_owned_by_opponent_of(&self, player: &Player) -> bool {
+    pub fn is_owned_by_opponent_of(&self, player_id: u128) -> bool {
         match self.owner_id {
             None => false,
-            Some(id) => id != player.id,
+            Some(id) => id != player_id,
         }
     }
 
     /// Set the owner of the tile
     /// Reset the occupation
-    pub fn set_owner(&mut self, player: &Player) {
-        self.owner_id = Some(player.id);
+    pub fn set_owner(&mut self, player_id: u128) {
+        self.owner_id = Some(player_id);
         self.occupation = 1;
     }
 

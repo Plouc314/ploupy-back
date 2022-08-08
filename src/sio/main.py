@@ -297,14 +297,10 @@ async def action_move_probes(us: _s.User, model: actions.MoveProbes) -> _c.Respo
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_move_probes(player, model.ids, model.target)
+        gs.game.action_move_probes(us.user.uid, model.ids, model.target)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("game_state", response.json(), to=gs.gid)
 
     return _c.Response().json()
 
@@ -322,14 +318,10 @@ async def action_explode_probes(
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_explode_probes(player, model.ids)
+        gs.game.action_explode_probes(us.user.uid, model.ids)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("game_state", response.json(), to=gs.gid)
 
     return _c.Response().json()
 
@@ -345,13 +337,9 @@ async def action_probes_attack(us: _s.User, model: actions.ProbesAttack) -> _c.R
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_probes_attack(player, model.ids)
+        gs.game.action_probes_attack(us.user.uid, model.ids)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("game_state", response.json(), to=gs.gid)
 
     return _c.Response().json()

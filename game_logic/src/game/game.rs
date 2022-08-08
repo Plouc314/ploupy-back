@@ -112,7 +112,7 @@ impl Game {
         for _ in 0..self.config.initial_n_probes {
             let mut probe = Probe::new(&self.config, pos.as_point());
             if let Some(target) = self.map.get_probe_farm_target(&player, &probe) {
-                probe.set_target(target.as_point());
+                probe.set_target_manually(target.as_point());
             }
             let factory = player.factories.last_mut().unwrap();
             factory.attach_probe(probe);
@@ -159,9 +159,9 @@ impl Game {
         }
     }
 
-    pub fn run(&mut self) -> Option<GameState> {
+    pub fn run(&mut self, dt: f64) -> Option<GameState> {
         let mut ctx = FrameContext {
-            dt: 1.0 / 60.0,
+            dt: dt,
             config: &self.config,
             map: &mut self.map,
         };
@@ -225,6 +225,68 @@ impl Game {
         // actually build the factory
         if !player.build_factory(coord, &mut self.map, &self.config) {
             return Err(format!("Not enough money (<{})", self.config.factory_price));
+        }
+
+        Ok(())
+    }
+
+    pub fn move_probes(
+        &mut self,
+        player_id: u128,
+        ids: Vec<u128>,
+        target_x: i32,
+        target_y: i32,
+    ) -> Result<(), String> {
+        let target = Coord::new(target_x, target_y);
+        let tile = match self.map.get_tile(&target) {
+            Some(tile) => tile,
+            None => {
+                return Err(format!("Move target is invalid ({:?})", &target));
+            }
+        };
+
+        let player = match self.players.iter_mut().find(|p| p.id == player_id) {
+            Some(player) => player,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        if tile.is_owned_by_opponent_of(player.id) {
+            return Err(format!("Move target is invalid ({:?})", &target));
+        }
+
+        for id in ids {
+            player.set_probe_target(id, target.as_point());
+        }
+        Ok(())
+    }
+
+    pub fn explode_probes(&mut self, player_id: u128, ids: Vec<u128>) -> Result<(), String> {
+        let player = match self.players.iter_mut().find(|p| p.id == player_id) {
+            Some(player) => player,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        for id in ids {
+            player.explode_probe(id, &mut self.map);
+        }
+
+        Ok(())
+    }
+
+    pub fn probes_attack(&mut self, player_id: u128, ids: Vec<u128>) -> Result<(), String> {
+        let player = match self.players.iter_mut().find(|p| p.id == player_id) {
+            Some(player) => player,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        for id in ids {
+            player.probe_attack(id, &mut self.map);
         }
 
         Ok(())

@@ -46,7 +46,7 @@ fn test_game() {
     let mut game = Game::new(player_ids, config);
 
     println!("Start run game...");
-    let state = game.run();
+    let state = game.run(1.0 / 60.0);
     println!("{:?}", state);
     println!("End run game.");
 }

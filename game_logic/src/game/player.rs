@@ -7,7 +7,7 @@ use super::{
     factory::{Factory, FactoryState},
     probe::{Probe, ProbeState},
     Coord, Delayer, FactoryDeathCause, FactoryPolicy, FrameContext, GameConfig, Identifiable, Map,
-    StateHandler,
+    Point, StateHandler,
 };
 
 #[derive(Clone, Debug)]
@@ -136,7 +136,7 @@ impl Player {
             state.id = probe.id;
             // set target
             if let Some(target) = ctx.map.get_probe_farm_target(self, &probe) {
-                probe.set_target(target.as_point());
+                probe.set_target_manually(target.as_point());
                 state.target = Some(target);
             } else {
                 log::warn!(
@@ -147,6 +147,57 @@ impl Player {
             return Some(probe);
         }
         None
+    }
+
+    /// Return the probe with the given id, if it exists
+    fn get_mut_probe_by_id(&mut self, probe_id: u128) -> Option<&mut Probe> {
+        self.factories
+            .iter_mut()
+            .find_map(|f| f.get_mut_probe_by_id(probe_id))
+    }
+
+    /// Set a new target for the probe \
+    /// Update involved states \
+    /// Return if it could be done (if the probe exists)
+    pub fn set_probe_target(&mut self, probe_id: u128, target: Point) -> bool {
+        let probe = match self.get_mut_probe_by_id(probe_id) {
+            Some(probe) => probe,
+            None => {
+                return false;
+            }
+        };
+        probe.set_farm_target(target);
+        true
+    }
+
+    /// Explode the probe \
+    /// Update involved states \
+    /// Return if it could be done (if the probe exists)
+    pub fn explode_probe(&mut self, probe_id: u128, map: &mut Map) -> bool {
+        let id = self.id;
+        let probe = match self.get_mut_probe_by_id(probe_id) {
+            Some(probe) => probe,
+            None => {
+                return false;
+            }
+        };
+        probe.explode(id, map);
+        true
+    }
+
+    /// Make the probe attack \
+    /// Update involved states \
+    /// Return if it could be done (if the probe exists)
+    pub fn probe_attack(&mut self, probe_id: u128, map: &mut Map) -> bool {
+        let id = self.id;
+        let probe = match self.get_mut_probe_by_id(probe_id) {
+            Some(probe) => probe,
+            None => {
+                return false;
+            }
+        };
+        probe.attack(id, map);
+        true
     }
 
     /// Create a new factory, add it to player's factories,

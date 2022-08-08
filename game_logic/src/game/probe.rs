@@ -1,7 +1,9 @@
 use super::core::{self, FrameContext};
 use super::core::{Coord, Point};
 use super::player::Player;
-use super::{geometry, Delayer, GameConfig, Identifiable, State, StateHandler, NOT_IDENTIFIABLE};
+use super::{
+    geometry, Delayer, GameConfig, Identifiable, Map, State, StateHandler, NOT_IDENTIFIABLE,
+};
 
 #[derive(Debug)]
 pub enum ProbePolicy {
@@ -141,34 +143,44 @@ impl Probe {
     }
 
     /// Select a new target and (if found) set the new target
-    /// and update the current state
-    fn select_next_target(&mut self, player: &Player, ctx: &mut FrameContext) {
-        let target;
-        match &self.policy {
-            ProbePolicy::Farm => {
-                target = ctx.map.get_probe_farm_target(player, &self);
-            }
-            ProbePolicy::Attack => {
-                target = ctx.map.get_probe_attack_target(player, &self);
-            }
-            _ => {
-                panic!("Unexpected probe policy: {:?}", self.policy);
+    /// (see `set_target_mannually` for details), update state
+    fn select_farm_target(&mut self, player: &Player, map: &mut Map) {
+        let target = match map.get_probe_farm_target(player, &self) {
+            Some(target) => target,
+            None => {
+                return;
             }
         };
-        if let Some(target) = target {
-            let target = target.as_point();
-            // in case the target has changed -> update current state
-            if target != self.target {
-                self.state_handle.get_mut().target = Some(target.as_coord());
-            }
-            self.set_target(target);
+        let target = target.as_point();
+        // in case the target has changed -> update current state
+        if target != self.target {
+            self.state_handle.get_mut().target = Some(target.as_coord());
         }
+        self.set_target_manually(target);
     }
 
-    /// Set a new target,
-    /// Compute new move direction \
-    /// Note: don't update current state
-    pub fn set_target(&mut self, target: Point) {
+    /// Select a new target and (if found) set the new target
+    /// (see `set_target_mannually` for details), update state
+    fn select_attack_target(&mut self, player_id: u128, map: &mut Map) {
+        let target = match map.get_probe_attack_target(player_id, &self) {
+            Some(target) => target,
+            None => {
+                return;
+            }
+        };
+        let target = target.as_point();
+        // in case the target has changed -> update current state
+        if target != self.target {
+            self.state_handle.get_mut().target = Some(target.as_coord());
+        }
+        self.set_target_manually(target);
+    }
+
+    /// Set a new target \
+    /// Compute new move direction and reset travel delayer \
+    /// Note: do not update current state or probe's policy
+    /// (see `set_farm_target` or `set_attack_target`).
+    pub fn set_target_manually(&mut self, target: Point) {
         self.target = target;
         self.move_dir = Point::new(self.target.x - self.pos.x, self.target.y - self.pos.y);
         self.delayer_travel
@@ -176,6 +188,23 @@ impl Probe {
         self.delayer_travel.reset();
         self.move_dir.normalize();
         self.move_dir.mul(self.config.speed);
+    }
+
+    /// Set a new farm target \
+    /// Update current state, move direction, travel delayer, policy
+    pub fn set_farm_target(&mut self, target: Point) {
+        self.state_handle.get_mut().pos = Some(self.pos.clone());
+        self.state_handle.get_mut().target = Some(target.as_coord());
+        self.policy = ProbePolicy::Farm;
+        self.set_target_manually(target);
+    }
+
+    /// Set a new attack target \
+    /// Update current state, move direction, travel delayer, policy
+    pub fn attack(&mut self, player_id: u128, map: &mut Map) {
+        self.state_handle.get_mut().pos = Some(self.pos.clone());
+        self.policy = ProbePolicy::Attack;
+        self.select_attack_target(player_id, map);
     }
 
     /// Return if the current position is sufficiently close to the target
@@ -192,12 +221,23 @@ impl Probe {
 
     /// Claims neighbours tiles twice \
     /// Notify death in probe state
-    fn explode(&mut self, player: &Player, ctx: &mut FrameContext) {
+    pub fn explode(&mut self, player_id: u128, map: &mut Map) {
         self.state_handle.get_mut().death = Some(ProbeDeathCause::Exploded);
         let coords = geometry::square(&self.get_coord(), 1);
         for coord in coords.iter() {
-            ctx.map.claim_tile(player, coord);
-            ctx.map.claim_tile(player, coord);
+            // make sure to explode on opponent tile
+            match map.get_tile(coord) {
+                None => {
+                    continue;
+                }
+                Some(tile) => {
+                    if !tile.is_owned_by_opponent_of(player_id) {
+                        continue;
+                    }
+                }
+            };
+            map.claim_tile(player_id, coord);
+            map.claim_tile(player_id, coord);
         }
     }
 
@@ -206,8 +246,8 @@ impl Probe {
     fn claim(&mut self, player: &Player, ctx: &mut FrameContext) {
         if self.delayer_claim.wait(ctx) {
             self.policy = ProbePolicy::Farm;
-            ctx.map.claim_tile(player, &self.get_coord());
-            self.select_next_target(player, ctx);
+            ctx.map.claim_tile(player.id, &self.get_coord());
+            self.select_farm_target(player, ctx.map);
         }
     }
 
@@ -221,7 +261,6 @@ impl Probe {
         );
         match self.policy {
             ProbePolicy::Farm => {
-                log::debug!("pos: {:?}  target: {:?}", &self.pos, &self.target);
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
                     self.policy = ProbePolicy::Claim;
@@ -232,7 +271,7 @@ impl Probe {
             ProbePolicy::Attack => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.explode(player, ctx);
+                    self.explode(player.id, ctx.map);
                 }
             }
             ProbePolicy::Claim => {
