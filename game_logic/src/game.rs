@@ -6,6 +6,7 @@ mod map;
 mod player;
 mod probe;
 mod random;
+mod turret;
 
 pub use self::core::*;
 pub use self::factory::*;
@@ -14,6 +15,7 @@ pub use self::geometry::*;
 pub use self::map::*;
 pub use self::player::*;
 pub use self::probe::*;
+pub use self::turret::*;
 
 pub struct GameConfig {
     /// dimension of the map (unit: coord),
@@ -66,7 +68,7 @@ pub struct GameConfig {
     /// delay to wait for the turret between two fires (sec)
     pub turret_fire_delay: f64,
 
-    /// scope of the turret (unit| coord)
+    /// scope of the turret (unit: coord)
     pub turret_scope: f64,
 
     /// Costs of possessing one turret (computed in the player's income)

@@ -22,26 +22,26 @@ class TileState(BaseModel):
 class Factory(BaseModel):
     id: str
     coord: core.Point
-    alive: bool
+    death: str | None
 
 
 class FactoryState(BaseModel):
     id: str
     coord: core.Point | None = None
-    alive: bool | None = None
+    death: str | None = None
 
 
 class Probe(BaseModel):
     id: str
     pos: core.Point
-    alive: bool
+    death: str | None
     target: core.Point
 
 
 class ProbeState(BaseModel):
     id: str
     pos: core.Point | None = None
-    alive: bool | None = None
+    death: str | None = None
     target: core.Point | None = None
 
 
@@ -53,11 +53,11 @@ class ProbePolicy(Enum):
 class Turret(BaseModel):
     id: str
     coord: core.Point
-    alive: bool
+    death: str | None
 
 
 class TurretState(BaseModel):
     id: str
     coord: core.Point | None = None
-    alive: bool | None = None
-
+    death: str | None = None
+    shot_id: str | None = None

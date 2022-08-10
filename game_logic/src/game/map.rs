@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
 use super::{
-    core, core::Coord, geometry, player::Player, probe::Probe, random, state_vec_insert,
+    core, core::Coord, geometry, player::Player, probe::Probe, random, state_vec_insert, Delayer,
     GameConfig, GameState, Identifiable, State, StateHandler,
 };
 
-use log::warn;
+use log;
 
 struct MapConfig {
     pub dim: Coord,
     pub max_occupation: u32,
-    pub income_rate: f64,
+    pub deprecate_rate: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -57,6 +57,7 @@ pub struct Map {
     config: MapConfig,
     pub state_handle: StateHandler<MapState>,
     tiles: Vec<Vec<Tile>>,
+    delayer_deprecate: Delayer,
 }
 
 impl Map {
@@ -75,10 +76,11 @@ impl Map {
             config: MapConfig {
                 dim: dim,
                 max_occupation: config.max_occupation,
-                income_rate: config.income_rate,
+                deprecate_rate: config.deprecate_rate,
             },
             state_handle: StateHandler::new(&()),
             tiles: tiles,
+            delayer_deprecate: Delayer::new(1.0),
         };
     }
 
@@ -100,17 +102,17 @@ impl Map {
             .get_mut(coord.y as usize)
     }
 
-    /// Return the income of all his owned tiles to one player
-    pub fn get_player_income(&self, player: &Player) -> f64 {
-        let mut income = 0.0;
+    /// Return the total occupation of all owned tiles of player
+    pub fn get_player_occupation(&self, player: &Player) -> u32 {
+        let mut occupation = 0;
         for col in self.tiles.iter() {
             for tile in col.iter() {
                 if tile.is_owned_by(player.id) {
-                    income += tile.occupation as f64 * self.config.income_rate;
+                    occupation += tile.occupation;
                 }
             }
         }
-        income
+        occupation
     }
 
     /// Return complete current map state
@@ -222,12 +224,13 @@ impl Map {
             }
             idx += 1;
             if idx == 1000 {
-                warn!("Didn't found attack target");
+                log::warn!("Didn't found attack target");
                 return None;
             }
         }
         // choose tile in region
         let mut tiles = self.get_neighbour_tiles(&target_tile.unwrap(), 2);
+        tiles.push(target_tile.unwrap());
         random::shuffle_vec(&mut tiles);
         for tile in tiles {
             if tile.is_owned_by_opponent_of(player_id) {
@@ -235,6 +238,27 @@ impl Map {
             }
         }
         None
+    }
+
+    /// For each tile, if it meets the conditions,
+    /// decrease its occupation with a certain probability.
+    fn deprecate_tiles(&mut self) {
+        for tile in self.tiles.iter_mut().flat_map(|c| c.iter_mut()) {
+            if tile.occupation <= 5 {
+                continue;
+            }
+
+            // compute probability
+            let mut prob = (tile.occupation - 5) as f64 / (self.config.max_occupation - 5) as f64;
+            prob *= self.config.deprecate_rate;
+
+            if random::random() <= prob {
+                tile.decr_occupation();
+
+                let state = TileState::new(&tile);
+                state_vec_insert(&mut self.state_handle.get_mut().tiles, state);
+            }
+        }
     }
 
     /// Claim the tile at the coordinate of the probe \
@@ -286,6 +310,13 @@ impl Map {
         }
 
         true
+    }
+
+    /// run the map
+    pub fn run(&mut self, dt: f64) {
+        if self.delayer_deprecate.wait(dt) {
+            self.deprecate_tiles();
+        }
     }
 }
 

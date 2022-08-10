@@ -1,7 +1,6 @@
 import socketio
-from pydantic import ValidationError
 
-from src.core import ActionException, logged
+from src.core import ActionException
 
 from src.models import core as _c, sio as _s
 from src.models.sio import actions, responses
@@ -274,14 +273,10 @@ async def action_build_turret(us: _s.User, model: actions.BuildTurret) -> _c.Res
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_build_turret(player, model.coord)
+        gs.game.action_build_turret(us.user.uid, model.coord)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("build_turret", response.json(), to=gs.gid)
 
     return _c.Response().json()
 

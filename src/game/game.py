@@ -11,6 +11,12 @@ from src.sio import JobManager
 from .map import Map
 from .player import Player
 
+# setup rust logger
+try:
+    gl.setup_logger()
+except BaseException:
+    pass
+
 
 class GameRS:
     def __init__(
@@ -20,28 +26,54 @@ class GameRS:
         config: _c.GameConfig,
         on_end_game: Callable[[_g.GameResult, bool], None],
     ):
-        self.users = users
+        self.users = users  # game players
         self.job_manager = job_manager
         self.config = config
+
         # map: python id -> rust id
         self._ids_map = {u.uid: abs(hash(u.uid)) for u in users}
         self._game = gl.Game(list(self._ids_map.values()), config.dict())
+
+        # if the game is finished
+        self._ended = False
+
+        # function called when the game ends
+        self._on_end_game = on_end_game
+
+        self._job_flag = True
+
+        self._dead_players: list[_c.User] = []
 
         job = self.job_manager.make_job("game_state", self.job_run)
         job.start()
 
     async def job_run(self, jb: JobManager):
-        ct = time.perf_counter()
+        ct = time.time()
+        frame_times = []
         while True:
             await self.job_manager.sleep(1 / 60)
-            dt = time.perf_counter() - ct
-            state = self._game.run(dt)
-            ct = time.perf_counter()
 
+            if not self._job_flag:
+                break
+
+            t = time.time()
+            dt, ct = t - ct, t
+            frame_times.append(dt)
+
+            state = self._game.run(dt)
             if state is None:
                 continue
+
+            if state["game_ended"]:
+                self.end_game()
+                break
+
             self._cast_rs_model(state)
+            self._notice_dead_players(state)
             yield _g.GameState(**state)
+
+        m = sum(frame_times) / len(frame_times)
+        print(f"Mean frame time: {m*1000:.4f} ms")
 
     def is_player(self, uid: str) -> bool:
         """
@@ -61,13 +93,10 @@ class GameRS:
     def _cast_rs_model(self, raw: dict):
         for ps in raw["players"]:
             ps["username"] = self._get_user(ps.pop("id")).username
-            ps["alive"] = not ps.get("death", None)
+
             probe_states = []
             for fs in ps["factories"]:
-                fs["alive"] = not fs.get("death", None)
-                probe_states += (
-                    p | {"alive": not p.get("death", None)} for p in fs.pop("probes")
-                )
+                probe_states += fs.pop("probes")
             ps["probes"] = probe_states
 
         _map = raw.get("map")
@@ -75,6 +104,48 @@ class GameRS:
             for _tile in _map["tiles"]:
                 if "owner_id" in _tile.keys():
                     _tile["owner"] = self._get_user(_tile.pop("owner_id")).username
+
+    def _notice_dead_players(self, state: dict):
+        """
+        Notice dead players
+        """
+        for ps in state["players"]:
+            if ps.get("death", None):
+                self._dead_players.append(self._get_user(ps["id"]))
+
+    def end_game(self, aborted: bool = False, delay: float = 0.5):
+        """
+        End the game (Will only be done once)
+
+        - Build GameResults
+        - Call `on_end_game` (in separate job)
+        """
+        if self._ended:
+            return
+        self._ended = True
+        self._job_flag = False
+
+        # ranking
+        ranking = [
+            u for u in self.users if u not in self._dead_players
+        ] + self._dead_players[::-1]
+
+        # stats
+        raw_stats = self._game.get_stats()
+        stats: list[_g.GamePlayerStats] = []
+        for user in self.users:
+            rid = self._ids_map[user.uid]
+            stats.append(_g.GamePlayerStats(username=user.username, **raw_stats[rid]))
+
+        game_results = _g.GameResult(ranking=ranking, stats=stats)
+
+        # call on_end_game after a delay (for last GameState to reach client)
+        # on_end_game is responsible to notify client
+        # and overall clean up of game in sio server
+        self.job_manager.execute(
+            partial(self._on_end_game, game_results, aborted),
+            delay=delay,
+        )
 
     def action_resign_game(self, uid: str) -> None:
         """
@@ -103,6 +174,21 @@ class GameRS:
 
         try:
             self._game.action_build_factory(rid, int(coord.x), int(coord.y))
+        except ValueError as e:
+            raise ActionException(str(e))
+
+    def action_build_turret(self, uid: str, coord: _c.Point) -> None:
+        """
+        Build a turret at the given coord for the given player is possible
+
+        Raise: ActionException
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_build_turret(rid, int(coord.x), int(coord.y))
         except ValueError as e:
             raise ActionException(str(e))
 

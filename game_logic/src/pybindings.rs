@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+
+use crate::game::PlayerStats;
+
 use super::game::{
-    Coord, FactoryDeathCause, FactoryState, GameConfig, GameState, MapState, PlayerState, Point,
-    ProbeDeathCause, ProbeState, TileState, NOT_IDENTIFIABLE,
+    Coord, FactoryState, GameConfig, GameState, MapState, PlayerState, Point, ProbeState,
+    TileState, TurretState, NOT_IDENTIFIABLE,
 };
-use pyo3::{exceptions, types::PyDict, FromPyObject, PyErr, PyResult, Python};
+use pyo3::{exceptions, types::PyDict, FromPyObject, PyErr, PyResult, Python, ToPyObject};
 
 pub trait AsDict<'a> {
     fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict>;
@@ -77,6 +81,20 @@ where
     }
 }
 
+impl<'a, K, V> AsDict<'a> for HashMap<K, V>
+where
+    V: AsDict<'a>,
+    K: ToPyObject,
+{
+    fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
+        let dict = PyDict::new(_py);
+        for (key, value) in self.iter() {
+            dict.set_item(key, value.to_dict(_py)?)?;
+        }
+        Ok(dict)
+    }
+}
+
 impl<'a> AsDict<'a> for Coord {
     fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
         let dict = PyDict::new(_py);
@@ -148,6 +166,21 @@ impl<'a> AsDict<'a> for FactoryState {
     }
 }
 
+impl<'a> AsDict<'a> for TurretState {
+    fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
+        let dict = PyDict::new(_py);
+        dict.set_item("id", self.id)?;
+
+        if let Some(death) = &self.death {
+            dict.set_item("death", format!("{:?}", death))?;
+        }
+        set_dict_item(_py, dict, "coord", &self.coord)?;
+        set_item(dict, "shot_id", &self.shot_id)?;
+
+        Ok(dict)
+    }
+}
+
 impl<'a> AsDict<'a> for PlayerState {
     fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
         let dict = PyDict::new(_py);
@@ -161,7 +194,7 @@ impl<'a> AsDict<'a> for PlayerState {
         set_item(dict, "money", &self.money)?;
         set_item(dict, "income", &self.income)?;
         set_vec_dict_item(_py, dict, "factories", &self.factories)?;
-        dict.set_item("turrets", &Vec::<i32>::new())?;
+        set_vec_dict_item(_py, dict, "turrets", &self.turrets)?;
 
         Ok(dict)
     }
@@ -181,8 +214,23 @@ impl<'a> AsDict<'a> for GameState {
     fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
         let dict = PyDict::new(_py);
 
+        dict.set_item("game_ended", self.game_ended)?;
         set_dict_item(_py, dict, "map", &self.map)?;
         set_vec_dict_item(_py, dict, "players", &self.players)?;
+
+        Ok(dict)
+    }
+}
+
+impl<'a> AsDict<'a> for PlayerStats {
+    fn to_dict(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
+        let dict = PyDict::new(_py);
+
+        dict.set_item("money", self.money.clone())?;
+        dict.set_item("occupation", self.occupation.clone())?;
+        dict.set_item("factories", self.factories.clone())?;
+        dict.set_item("turrets", self.turrets.clone())?;
+        dict.set_item("probes", self.probes.clone())?;
 
         Ok(dict)
     }

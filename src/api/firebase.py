@@ -1,6 +1,5 @@
 import json
 import os
-from dotenv import load_dotenv
 from datetime import datetime, timezone
 
 import firebase_admin
@@ -8,11 +7,7 @@ from firebase_admin import credentials
 from firebase_admin import db, auth
 
 from src.models import core as _c
-from src.core import FirebaseException, FLAG_DEPLOY
-
-
-if not FLAG_DEPLOY:
-    load_dotenv()
+from src.core import FirebaseException
 
 
 class Firebase:

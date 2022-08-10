@@ -1,3 +1,5 @@
+use std::slice::IterMut;
+
 use log;
 
 use super::core::{state_vec_insert, Coord, FrameContext, State};
@@ -122,6 +124,16 @@ impl Factory {
         self.probes.push(probe);
     }
 
+    /// Return the number of probes currently attached to the factory
+    pub fn get_num_probes(&self) -> usize {
+        self.probes.len()
+    }
+
+    /// Iterator over each probe of factory
+    pub fn iter_mut_probes(&mut self) -> IterMut<Probe> {
+        self.probes.iter_mut()
+    }
+
     /// Return the probe with the given id, if it exists
     pub fn get_mut_probe_by_id(&mut self, probe_id: u128) -> Option<&mut Probe> {
         self.probes.iter_mut().find(|p| p.id == probe_id)
@@ -137,22 +149,26 @@ impl Factory {
         -(self.probes.len() as f64) * self.config.probe_maintenance_costs
     }
 
+    /// Factory dies \
     /// Kill all factory's probes \
-    /// Return their states (with death cause)
-    pub fn die(&self) -> Vec<ProbeState> {
+    /// Return factory state
+    pub fn die(&self, death_cause: FactoryDeathCause) -> FactoryState {
         let mut probe_states = Vec::with_capacity(self.probes.len());
         for probe in self.probes.iter() {
             let mut state = ProbeState::new(&probe.id);
             state.death = Some(ProbeDeathCause::Scrapped);
             probe_states.push(state);
         }
-        probe_states
+        let mut state = FactoryState::new(&self.id);
+        state.probes = probe_states;
+        state.death = Some(death_cause);
+        state
     }
 
     /// Claim tiles next to the factory
     /// When done, switch to Produce policy
     fn expand(&mut self, player_id: u128, ctx: &mut FrameContext) {
-        if !self.delayer_expand.wait(ctx) {
+        if !self.delayer_expand.wait(ctx.dt) {
             return;
         }
         self.expand_step += 1;
@@ -178,7 +194,7 @@ impl Factory {
             self.policy = FactoryPolicy::Wait;
             return;
         }
-        if self.delayer_produce.wait(ctx) {
+        if self.delayer_produce.wait(ctx.dt) {
             let state = self.create_probe_state();
             self.state_handle.get_mut().probes.push(state);
         }

@@ -16,7 +16,7 @@ class Player(BaseModel):
     username: str
     money: int
     # score: int
-    alive: bool
+    death: str | None
     income: int
     factories: list[entities.Factory]
     turrets: list[entities.TurretState]
@@ -27,7 +27,7 @@ class PlayerState(BaseModel):
     username: str
     money: int | None = None
     # score: int | None = None
-    alive: bool | None = None
+    death: str | None = None
     income: int | None = None
     factories: list[entities.FactoryState] = []
     turrets: list[entities.TurretState] = []

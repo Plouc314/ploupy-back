@@ -51,4 +51,10 @@ fn test_game() {
     println!("End run game.");
 }
 
-fn main() {}
+fn main() {
+    let a = vec![1, 2, 3];
+    let b = vec![4, 5, 6];
+    for v in a.iter().chain(b.iter()) {
+        println!("{}", v);
+    }
+}

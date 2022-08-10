@@ -3,15 +3,18 @@ use super::{
     map::{Map, MapState},
     player::{Player, PlayerState},
     probe::Probe,
-    state_vec_insert, Coord, FactoryDeathCause, FactoryState, GameConfig, Identifiable,
-    PlayerDeathCause, ProbeState, State, StateHandler,
+    state_vec_insert,
+    turret::TurretDeathCause,
+    Coord, FactoryDeathCause, FactoryState, GameConfig, Identifiable, PlayerDeathCause,
+    PlayerStats, ProbeState, State, StateHandler,
 };
-use std::cmp;
+use std::{cmp, collections::HashMap};
 
 #[derive(Clone, Debug)]
 pub struct GameState {
     pub map: Option<MapState>,
     pub players: Vec<PlayerState>,
+    pub game_ended: bool,
 }
 
 impl State for GameState {
@@ -21,6 +24,7 @@ impl State for GameState {
         GameState {
             map: None,
             players: Vec::new(),
+            game_ended: false,
         }
     }
 
@@ -45,6 +49,8 @@ pub struct Game {
     state_handle: StateHandler<GameState>,
     map: Map,
     players: Vec<Player>,
+    /// Store player stats gradually, as they die
+    player_stats: HashMap<u128, PlayerStats>,
 }
 
 impl Game {
@@ -54,6 +60,7 @@ impl Game {
             state_handle: StateHandler::new(&()),
             config: config,
             players: Vec::new(),
+            player_stats: HashMap::new(),
         };
         game.create_players(player_ids);
         game
@@ -64,6 +71,7 @@ impl Game {
         let mut state = GameState {
             players: Vec::with_capacity(self.players.len()),
             map: Some(self.map.get_complete_state()),
+            game_ended: false,
         };
         for player in self.players.iter() {
             state.players.push(player.get_complete_state());
@@ -130,12 +138,21 @@ impl Game {
         let idx = self.players.iter().position(|p| p.id == player_id);
         if let Some(idx) = idx {
             let player = self.players.remove(idx);
-            let mut state = PlayerState::new(&player_id);
-            state.death = Some(death_cause);
-            state.factories = player.die();
-            return Some(state);
+            self.player_stats.insert(player.id, player.get_stats(1.0));
+            return Some(player.die(death_cause));
         }
         None
+    }
+
+    /// Return the players stats (dead players included)
+    pub fn get_players_stats(&self) -> HashMap<u128, PlayerStats> {
+        let mut stats = self.player_stats.clone();
+        for player in self.players.iter() {
+            if !stats.contains_key(&player.id) {
+                stats.insert(player.id, player.get_stats(1.0));
+            }
+        }
+        stats
     }
 
     /// Kill all building marked has dead by map
@@ -146,16 +163,30 @@ impl Game {
             if let Some(player) = self.get_player_mut(*player_id) {
                 let mut state = PlayerState::new(player_id);
                 for id in dead_ids.iter() {
-                    // try kill factory (will later be turret too)
+                    // try kill factory
                     if let Some(factory_state) =
                         player.kill_factory(*id, FactoryDeathCause::Conquered)
                     {
                         // if it could be killed then it was a factory
                         state.factories.push(factory_state);
                     }
+                    // try kill turret
+                    if let Some(turret_state) = player.kill_turret(*id, TurretDeathCause::Conquered)
+                    {
+                        // if it could be killed then it was a turret
+                        state.turrets.push(turret_state);
+                    }
                 }
                 state_vec_insert(&mut self.state_handle.get_mut().players, state);
             }
+        }
+    }
+
+    /// Check end game condition \
+    /// If reached, update state
+    fn handle_end_game_condition(&mut self) {
+        if self.players.len() == 1 {
+            self.state_handle.get_mut().game_ended = true;
         }
     }
 
@@ -166,17 +197,46 @@ impl Game {
             map: &mut self.map,
         };
 
-        for player in self.players.iter_mut() {
-            let state = player.run(&mut ctx);
+        // extract players for iteration
+        let mut players: Vec<Player> = self.players.drain(..).collect();
+
+        let mut dead_player_idxs = Vec::new();
+
+        for i in 0..players.len() {
+            let mut player = players.remove(i);
+
+            let state = player.run(&mut ctx, players.iter_mut().collect());
             if let Some(state) = state {
+                // remove dead players
+                if state.death.is_some() {
+                    dead_player_idxs.push(i);
+                }
+
                 state_vec_insert(&mut self.state_handle.get_mut().players, state);
             }
+
+            players.insert(i, player);
         }
+
+        // put back players
+        self.players = players.drain(..).collect();
+
+        // remove all death players (note: in REVERSE order)
+        // this can be done here as handle_map_dead_building does
+        // not provoke player's death (see Player::kill_factory)
+        for idx in dead_player_idxs.iter().rev() {
+            let player = self.players.remove(*idx);
+            self.player_stats.insert(player.id, player.get_stats(1.0));
+        }
+
+        self.map.run(dt);
 
         if let Some(map_state) = self.map.state_handle.flush(&()) {
             self.handle_map_dead_building(&map_state);
             self.state_handle.get_mut().map = Some(map_state);
         }
+
+        self.handle_end_game_condition();
 
         self.state_handle.flush(&())
     }
@@ -225,6 +285,39 @@ impl Game {
         // actually build the factory
         if !player.build_factory(coord, &mut self.map, &self.config) {
             return Err(format!("Not enough money (<{})", self.config.factory_price));
+        }
+
+        Ok(())
+    }
+
+    pub fn create_turret(
+        &mut self,
+        player_id: u128,
+        coord_x: i32,
+        coord_y: i32,
+    ) -> Result<(), String> {
+        let coord = Coord::new(coord_x, coord_y);
+        let tile = match self.map.get_tile(&coord) {
+            Some(tile) => tile,
+            None => {
+                return Err(format!("Tile coordinate is invalid ({:?})", &coord));
+            }
+        };
+
+        let player = match self.players.iter_mut().find(|p| p.id == player_id) {
+            Some(player) => player,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        if !tile.can_build(player) {
+            return Err(String::from("Cannot build on tile"));
+        }
+
+        // actually build the turret
+        if !player.build_turret(coord, &mut self.map, &self.config) {
+            return Err(format!("Not enough money (<{})", self.config.turret_price));
         }
 
         Ok(())

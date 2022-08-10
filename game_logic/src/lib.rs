@@ -14,7 +14,6 @@ struct Game {
 impl Game {
     #[new]
     fn new(player_ids: Vec<u128>, config: &PyDict) -> PyResult<Self> {
-        env_logger::init();
         let config = game::GameConfig::from_dict(&config)?;
         Ok(Game {
             game: game::Game::new(player_ids, config),
@@ -25,7 +24,12 @@ impl Game {
         self.game.get_complete_state().to_dict(_py)
     }
 
+    pub fn get_stats<'a>(&self, _py: Python<'a>) -> PyResult<&'a PyDict> {
+        self.game.get_players_stats().to_dict(_py)
+    }
+
     pub fn run<'a>(&mut self, _py: Python<'a>, dt: f64) -> PyResult<Option<&'a PyDict>> {
+        log::debug!("[lib.rs] run...");
         let state = self.game.run(dt);
 
         match state {
@@ -49,6 +53,19 @@ impl Game {
         coord_y: i32,
     ) -> PyResult<()> {
         match self.game.create_factory(player_id, coord_x, coord_y) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
+        }
+    }
+
+    pub fn action_build_turret<'a>(
+        &mut self,
+        _py: Python<'a>,
+        player_id: u128,
+        coord_x: i32,
+        coord_y: i32,
+    ) -> PyResult<()> {
+        match self.game.create_turret(player_id, coord_x, coord_y) {
             Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
             Ok(v) => Ok(v),
         }
@@ -93,9 +110,15 @@ impl Game {
     }
 }
 
+#[pyfunction]
+fn setup_logger() {
+    env_logger::init();
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn game_logic(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Game>()?;
+    m.add_function(wrap_pyfunction!(setup_logger, m)?)?;
     Ok(())
 }

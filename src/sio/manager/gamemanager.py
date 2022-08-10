@@ -53,17 +53,15 @@ class GameManager(Manager):
         self, gid: str | None = None, user: core.User | None = None
     ) -> _s.Game | None:
         """
-        Get a sio game either by gid or by a sid (not necessarily connected),
+        Get a sio game either by gid or by a uid (not necessarily connected),
         return None if game not found
         """
         if gid is not None:
             return self._games.get(gid, None)
         if user is not None:
             for game in self._games.values():
-                for player in game.game.players.values():
-                    if player.user.uid == user.uid:
-                        return game
-            return None
+                if game.game.is_player(user.uid):
+                    return game
         return None
 
     def add_game(
@@ -110,7 +108,8 @@ class GameManager(Manager):
         """
         if gs.game.is_player(user.user.uid):
             # link player
-            gs.players.append(user)
+            if not self._is_user(gs.players, user):
+                gs.players.append(user)
         else:
             # link spectator
             if not self._is_user(gs.spectators, user):

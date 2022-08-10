@@ -142,6 +142,11 @@ impl Probe {
         }
     }
 
+    /// Update state with death cause
+    pub fn die_inplace(&mut self, death_cause: ProbeDeathCause) {
+        self.state_handle.get_mut().death = Some(death_cause);
+    }
+
     /// Select a new target and (if found) set the new target
     /// (see `set_target_mannually` for details), update state
     fn select_farm_target(&mut self, player: &Player, map: &mut Map) {
@@ -165,6 +170,11 @@ impl Probe {
         let target = match map.get_probe_attack_target(player_id, &self) {
             Some(target) => target,
             None => {
+                log::warn!(
+                    "[({:.3}) probe {:.3}] No target found.",
+                    player_id.to_string(),
+                    self.id.to_string(),
+                );
                 return;
             }
         };
@@ -201,7 +211,7 @@ impl Probe {
 
     /// Set a new attack target \
     /// Update current state, move direction, travel delayer, policy
-    pub fn attack(&mut self, player_id: u128, map: &mut Map) {
+    pub fn set_attack(&mut self, player_id: u128, map: &mut Map) {
         self.state_handle.get_mut().pos = Some(self.pos.clone());
         self.policy = ProbePolicy::Attack;
         self.select_attack_target(player_id, map);
@@ -210,7 +220,7 @@ impl Probe {
     /// Return if the current position is sufficiently close to the target
     /// to be considered equals
     fn is_target_reached(&mut self, ctx: &mut FrameContext) -> bool {
-        self.delayer_travel.wait(ctx)
+        self.delayer_travel.wait(ctx.dt)
     }
 
     /// Update current position: move to target
@@ -241,10 +251,26 @@ impl Probe {
         }
     }
 
+    fn attack(&mut self, player_id: u128, ctx: &mut FrameContext) {
+        let coord = self.target.as_coord();
+        if ctx
+            .map
+            .get_tile(&coord)
+            .unwrap()
+            .is_owned_by_opponent_of(player_id)
+        {
+            self.explode(player_id, ctx.map);
+        } else {
+            self.pos = self.target.clone();
+            self.state_handle.get_mut().pos = Some(self.target.clone());
+            self.select_attack_target(player_id, ctx.map);
+        }
+    }
+
     /// Wait for `claim_delay` then claim the tile
     /// at the current pos, switch to Farm policy
     fn claim(&mut self, player: &Player, ctx: &mut FrameContext) {
-        if self.delayer_claim.wait(ctx) {
+        if self.delayer_claim.wait(ctx.dt) {
             self.policy = ProbePolicy::Farm;
             ctx.map.claim_tile(player.id, &self.get_coord());
             self.select_farm_target(player, ctx.map);
@@ -271,7 +297,7 @@ impl Probe {
             ProbePolicy::Attack => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.explode(player.id, ctx.map);
+                    self.attack(player.id, ctx);
                 }
             }
             ProbePolicy::Claim => {

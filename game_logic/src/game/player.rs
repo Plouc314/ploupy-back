@@ -4,8 +4,10 @@ use crate::game::state_vec_insert;
 
 use super::{
     core::State,
+    core::NOT_IDENTIFIABLE,
     factory::{Factory, FactoryState},
     probe::{Probe, ProbeState},
+    turret::{Turret, TurretDeathCause, TurretState},
     Coord, Delayer, FactoryDeathCause, FactoryPolicy, FrameContext, GameConfig, Identifiable, Map,
     Point, StateHandler,
 };
@@ -17,12 +19,49 @@ pub enum PlayerDeathCause {
 }
 
 pub struct PlayerConfig {
-    initial_money: f64,
-    initial_n_probes: u32,
+    income_rate: f64,
     base_income: f64,
     probe_price: f64,
     factory_price: f64,
     factory_build_probe_delay: f64,
+    turret_price: f64,
+}
+
+#[derive(Clone)]
+pub struct PlayerStats {
+    pub money: Vec<f64>,
+    pub occupation: Vec<u32>,
+    pub factories: Vec<usize>,
+    pub turrets: Vec<usize>,
+    pub probes: Vec<usize>,
+}
+
+impl PlayerStats {
+    pub fn new() -> Self {
+        PlayerStats {
+            money: Vec::new(),
+            occupation: Vec::new(),
+            factories: Vec::new(),
+            turrets: Vec::new(),
+            probes: Vec::new(),
+        }
+    }
+
+    pub fn record(
+        &mut self,
+        time: f64,
+        money: f64,
+        occupation: u32,
+        factories: usize,
+        turrets: usize,
+        probes: usize,
+    ) {
+        self.money.push(money);
+        self.occupation.push(occupation);
+        self.factories.push(factories);
+        self.turrets.push(turrets);
+        self.probes.push(probes);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +72,7 @@ pub struct PlayerState {
     pub money: Option<f64>,
     pub income: Option<f64>,
     pub factories: Vec<FactoryState>,
+    pub turrets: Vec<TurretState>,
 }
 
 impl Identifiable for PlayerState {
@@ -51,6 +91,7 @@ impl State for PlayerState {
             money: None,
             income: None,
             factories: Vec::new(),
+            turrets: Vec::new(),
         }
     }
 
@@ -74,8 +115,10 @@ pub struct Player {
     pub id: u128,
     config: PlayerConfig,
     state_handle: StateHandler<PlayerState>,
+    stats: PlayerStats,
     money: f64,
     pub factories: Vec<Factory>,
+    pub turrets: Vec<Turret>,
     /// Delay to wait between two incomes
     delayer_income: Delayer,
 }
@@ -85,16 +128,18 @@ impl Player {
         Player {
             id: id,
             config: PlayerConfig {
-                initial_money: config.initial_money,
-                initial_n_probes: config.initial_n_probes,
+                income_rate: config.income_rate,
                 base_income: config.base_income,
                 probe_price: config.probe_price,
                 factory_price: config.factory_price,
                 factory_build_probe_delay: config.factory_build_probe_delay,
+                turret_price: config.turret_price,
             },
             state_handle: StateHandler::new(&id),
+            stats: PlayerStats::new(),
             money: config.initial_money,
             factories: Vec::new(),
+            turrets: Vec::new(),
             delayer_income: Delayer::new(1.0),
         }
     }
@@ -107,24 +152,36 @@ impl Player {
             money: Some(self.money),
             income: Some(0.0),
             factories: Vec::with_capacity(self.factories.len()),
+            turrets: Vec::with_capacity(self.turrets.len()),
         };
         for factory in self.factories.iter() {
             state.factories.push(factory.get_complete_state());
         }
+        for turret in self.turrets.iter() {
+            state.turrets.push(turret.get_complete_state());
+        }
         state
     }
 
-    /// Kill all player's factories \
-    /// Return their states (with death cause)
-    pub fn die(&self) -> Vec<FactoryState> {
+    /// Player dies \
+    /// Kill all player's factories & turrets \
+    /// Return player state
+    pub fn die(&self, death_cause: PlayerDeathCause) -> PlayerState {
+        // kill player's factories
         let mut factory_states = Vec::with_capacity(self.factories.len());
         for factory in self.factories.iter() {
-            let mut state = FactoryState::new(&factory.id);
-            state.death = Some(FactoryDeathCause::Scrapped);
-            state.probes = factory.die();
-            factory_states.push(state);
+            factory_states.push(factory.die(FactoryDeathCause::Scrapped));
         }
-        factory_states
+        // kill player's turrets
+        let mut turret_states = Vec::with_capacity(self.turrets.len());
+        for turret in self.turrets.iter() {
+            turret_states.push(turret.die(TurretDeathCause::Scrapped));
+        }
+        let mut state = PlayerState::new(&self.id);
+        state.factories = factory_states;
+        state.turrets = turret_states;
+        state.death = Some(death_cause);
+        state
     }
 
     /// Create a new probe, set a target for the probe \
@@ -135,18 +192,22 @@ impl Player {
             // set id
             state.id = probe.id;
             // set target
-            if let Some(target) = ctx.map.get_probe_farm_target(self, &probe) {
-                probe.set_target_manually(target.as_point());
-                state.target = Some(target);
-            } else {
-                log::warn!(
-                    "[Player {:.3}] (create_probe) No target found",
-                    self.id.to_string()
-                );
-            }
+            let target = match ctx.map.get_probe_farm_target(self, &probe) {
+                Some(target) => target,
+                None => pos.as_coord(),
+            };
+
+            probe.set_target_manually(target.as_point());
+            state.target = Some(target);
+
             return Some(probe);
         }
         None
+    }
+
+    /// Iterator over each probe of each factory of player
+    pub fn iter_mut_probes(&mut self) -> impl Iterator<Item = &mut Probe> {
+        self.factories.iter_mut().flat_map(|f| f.iter_mut_probes())
     }
 
     /// Return the probe with the given id, if it exists
@@ -196,7 +257,7 @@ impl Player {
                 return false;
             }
         };
-        probe.attack(id, map);
+        probe.set_attack(id, map);
         true
     }
 
@@ -242,6 +303,9 @@ impl Player {
 
     /// Kill a factory (if `factory_id` is valid) \
     /// Return factory state
+    ///
+    /// Note: This function won't provoke the player's death
+    /// even it's the last factory
     pub fn kill_factory(
         &mut self,
         factory_id: u128,
@@ -251,10 +315,60 @@ impl Player {
 
         if let Some(idx) = idx {
             let factory = self.factories.remove(idx);
-            let mut state = FactoryState::new(&factory.id);
-            state.death = Some(death_cause);
-            state.probes = factory.die();
-            return Some(state);
+            return Some(factory.die(death_cause));
+        }
+        None
+    }
+
+    /// Create a new turret, add it to player's turrets,
+    /// notify tile of new building. \
+    /// Return the new turret state
+    ///
+    /// Note:
+    /// - Do NOT care about player's money (see `build_turret` instead)
+    /// - Won't fail in case of invalid pos (tile just won't be notified)
+    pub fn create_turret(&mut self, pos: Coord, map: &mut Map, config: &GameConfig) -> TurretState {
+        let turret = Turret::new(config, pos.clone());
+
+        if let Some(tile) = map.get_mut_tile(&pos) {
+            tile.building_id = Some(turret.id);
+        }
+
+        let mut state = TurretState::new(&turret.id);
+        state.coord = Some(pos);
+        self.turrets.push(turret);
+        state
+    }
+
+    /// If player has enough money, create a new turret (see `create_turret`) \
+    /// Return if the new turret could be created
+    pub fn build_turret(&mut self, pos: Coord, map: &mut Map, config: &GameConfig) -> bool {
+        if self.money < self.config.turret_price {
+            return false;
+        }
+        self.money -= self.config.turret_price;
+        self.state_handle.get_mut().money = Some(self.money);
+
+        let state = self.create_turret(pos, map, config);
+        state_vec_insert(&mut self.state_handle.get_mut().turrets, state);
+        true
+    }
+
+    /// Kill a turret (if `turret_id` is valid) \
+    /// Return turret state
+    ///
+    /// Note: This function won't provoke the player's death
+    /// even it's the last turret
+    pub fn kill_turret(
+        &mut self,
+        turret_id: u128,
+        death_cause: TurretDeathCause,
+    ) -> Option<TurretState> {
+        let idx = self.turrets.iter().position(|t| t.id == turret_id);
+
+        if let Some(idx) = idx {
+            let turret = self.turrets.remove(idx);
+            return Some(turret.die(death_cause));
         }
         None
     }
@@ -276,13 +390,18 @@ impl Player {
     /// Wait for income delay, then compute income,
     /// update money and compute income prediction
     fn update_money(&mut self, ctx: &mut FrameContext) {
-        if !self.delayer_income.wait(ctx) {
+        if !self.delayer_income.wait(ctx.dt) {
             return;
         }
+        let total_occupation = ctx.map.get_player_occupation(&self);
+
         let mut income = self.config.base_income;
-        income += ctx.map.get_player_income(&self);
+        income += total_occupation as f64 * self.config.income_rate;
         for factory in self.factories.iter() {
             income += factory.get_income();
+        }
+        for turret in self.turrets.iter() {
+            income += turret.get_income();
         }
 
         self.money += income;
@@ -290,20 +409,54 @@ impl Player {
 
         self.state_handle.get_mut().money = Some(self.money);
         self.state_handle.get_mut().income = Some(prediction);
+
+        self.record(total_occupation);
+    }
+
+    /// Record player metrics
+    fn record(&mut self, total_occupation: u32) {
+        self.stats.record(
+            self.delayer_income.get_total_delayed(),
+            self.money,
+            total_occupation,
+            self.factories.len(),
+            self.turrets.len(),
+            self.factories.iter().map(|f| f.get_num_probes()).sum(),
+        );
+    }
+
+    /// Compile player state
+    pub fn get_stats(&self, time_unit: f64) -> PlayerStats {
+        self.stats.clone()
+    }
+
+    /// Check lose condition \
+    /// If reached, kill player, update state
+    fn handle_lose_condition(&mut self) {
+        if self.factories.len() == 0 {
+            self.state_handle
+                .merge(self.die(PlayerDeathCause::Defeated));
+        }
     }
 
     /// run function
-    pub fn run(&mut self, ctx: &mut FrameContext) -> Option<PlayerState> {
+    pub fn run(
+        &mut self,
+        ctx: &mut FrameContext,
+        mut opponents: Vec<&mut Player>,
+    ) -> Option<PlayerState> {
         log::debug!("[Player {:.3}] run...", self.id.to_string());
 
+        // extract factories for iteration
         let mut factories: Vec<Factory> = self.factories.drain(..).collect();
+
         let mut dead_factory_idxs = Vec::new();
         let mut is_money_change = false;
+
         for (i, factory) in factories.iter_mut().enumerate() {
             if let Some(mut state) = factory.run(&self, ctx) {
-                // handle death factories
+                // remove dead factories
                 if state.death.is_some() {
-                    state.probes.append(&mut factory.die());
                     dead_factory_idxs.push(i);
                 }
 
@@ -317,6 +470,12 @@ impl Player {
                         }
                     }
                 }
+                // remove probe states that could not be created
+                state.probes = state
+                    .probes
+                    .into_iter()
+                    .filter(|p| p.id != NOT_IDENTIFIABLE)
+                    .collect();
 
                 state_vec_insert(&mut self.state_handle.get_mut().factories, state);
             }
@@ -330,7 +489,32 @@ impl Player {
             self.factories.remove(*idx);
         }
 
+        // extract turrets for iteration
+        let mut turrets: Vec<Turret> = self.turrets.drain(..).collect();
+
+        let mut dead_turret_idxs = Vec::new();
+
+        for (i, turret) in turrets.iter_mut().enumerate() {
+            if let Some(state) = turret.run(&self, ctx, &mut opponents) {
+                // remove dead turrets
+                if state.death.is_some() {
+                    dead_turret_idxs.push(i);
+                }
+
+                state_vec_insert(&mut self.state_handle.get_mut().turrets, state);
+            }
+        }
+
+        // put back turrets
+        self.turrets = turrets.drain(..).collect();
+
+        // remove all death turrets (note: in REVERSE order)
+        for idx in dead_turret_idxs.iter().rev() {
+            self.turrets.remove(*idx);
+        }
+
         self.update_money(ctx);
+        self.handle_lose_condition();
 
         if is_money_change {
             self.state_handle.get_mut().money = Some(self.money);

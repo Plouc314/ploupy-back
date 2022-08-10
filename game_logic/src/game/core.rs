@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 
 #[derive(Debug, PartialEq)]
@@ -100,6 +102,7 @@ pub fn generate_unique_id() -> u128 {
 pub struct Delayer {
     delay: f64,
     counter: f64,
+    total_delayed: f64,
 }
 
 impl Delayer {
@@ -109,11 +112,19 @@ impl Delayer {
         Delayer {
             delay: delay,
             counter: 0.0,
+            total_delayed: 0.0,
         }
+    }
+
+    /// Return amount of time waited since the creation of
+    /// the instance (not affected by `reset`)
+    pub fn get_total_delayed(&self) -> f64 {
+        self.total_delayed
     }
 
     /// Reset the delay counter
     pub fn reset(&mut self) {
+        self.total_delayed += self.counter;
         self.counter = 0.0;
     }
 
@@ -125,10 +136,10 @@ impl Delayer {
     /// Increment the delay counter,
     /// when the delay is reached: reset the counter
     /// and return true
-    pub fn wait(&mut self, ctx: &FrameContext) -> bool {
-        self.counter += ctx.dt;
+    pub fn wait(&mut self, dt: f64) -> bool {
+        self.counter += dt;
         if self.counter >= self.delay {
-            self.counter = 0.0;
+            self.reset();
             return true;
         }
         false
@@ -140,7 +151,7 @@ pub trait Identifiable {
     fn id(&self) -> u128;
 
     /// Return if `other` is the same as self \
-    /// Note: Take `NOT_IDENTIFIABLE` into account when
+    /// Note: Takes `NOT_IDENTIFIABLE` into account when
     /// comparing ids.
     fn is(&self, other: &Self) -> bool {
         let id = self.id();
