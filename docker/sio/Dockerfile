@@ -22,6 +22,7 @@ COPY --from=build_rust /opt/build/target/wheels ./
 RUN pip3 install $(ls | grep *.whl)
 
 ENV RUST_LOG="WARN"
+ENV PYTHONUNBUFFERED=1
 
 RUN useradd -m myuser
 USER myuser

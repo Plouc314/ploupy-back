@@ -7,6 +7,8 @@ RUN pip3 install -r /tmp/requirements.txt
 ADD ./src /opt/webapp/src
 WORKDIR /opt/webapp
 
+ENV PYTHONUNBUFFERED=1
+
 RUN useradd -m myuser
 USER myuser
 
