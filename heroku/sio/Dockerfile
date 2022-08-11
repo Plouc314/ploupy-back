@@ -17,8 +17,6 @@ RUN pip3 install -r /tmp/requirements.txt
 ADD ./src /opt/webapp/src
 WORKDIR /opt/webapp
 
-ADD ./.env /opt/webapp/
-
 COPY --from=build_rust /opt/build/target/wheels ./
 
 RUN pip3 install $(ls | grep *.whl)
