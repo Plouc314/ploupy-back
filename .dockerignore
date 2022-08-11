@@ -4,3 +4,6 @@
 **/target/
 .env/
 *.json
+**/__pycache__
+**/foo.py
+logs

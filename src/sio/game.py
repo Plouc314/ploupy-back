@@ -60,12 +60,13 @@ class Game:
             if state is None:
                 continue
 
+            self._notice_dead_players(state)
+
             if state["game_ended"]:
                 self.end_game()
                 break
 
             self._cast_rs_model(state)
-            self._notice_dead_players(state)
             yield _g.GameState(**state)
 
         m = sum(frame_times) / len(frame_times)
