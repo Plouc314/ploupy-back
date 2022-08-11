@@ -4,7 +4,6 @@ from src.models.core import core
 import src.models.game.entities as entities
 
 
-
 class Map(BaseModel):
     tiles: list[entities.Tile]
 
@@ -16,8 +15,8 @@ class MapState(BaseModel):
 class Player(BaseModel):
     username: str
     money: int
-    score: int
-    alive: bool
+    # score: int
+    death: str | None
     income: int
     factories: list[entities.Factory]
     turrets: list[entities.TurretState]
@@ -27,8 +26,8 @@ class Player(BaseModel):
 class PlayerState(BaseModel):
     username: str
     money: int | None = None
-    score: int | None = None
-    alive: bool | None = None
+    # score: int | None = None
+    death: str | None = None
     income: int | None = None
     factories: list[entities.FactoryState] = []
     turrets: list[entities.TurretState] = []

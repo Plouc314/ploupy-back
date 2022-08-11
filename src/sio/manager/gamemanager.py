@@ -2,7 +2,7 @@ import uuid
 
 from src.models import core, game as _g, sio as _s, api as _a
 
-from src.game import Game
+from src.game import GameRS as Game
 
 from .manager import Manager
 from ..client import client
@@ -53,17 +53,15 @@ class GameManager(Manager):
         self, gid: str | None = None, user: core.User | None = None
     ) -> _s.Game | None:
         """
-        Get a sio game either by gid or by a sid (not necessarily connected),
+        Get a sio game either by gid or by a uid (not necessarily connected),
         return None if game not found
         """
         if gid is not None:
             return self._games.get(gid, None)
         if user is not None:
             for game in self._games.values():
-                for player in game.game.players.values():
-                    if player.user.uid == user.uid:
-                        return game
-            return None
+                if game.game.is_player(user.uid):
+                    return game
         return None
 
     def add_game(
@@ -108,7 +106,7 @@ class GameManager(Manager):
         - Set user `gid` attribute
         - If not socket-io user in sio.Game, add it
         """
-        if gs.game.get_player(user.user.username) is not None:
+        if gs.game.is_player(user.user.uid):
             # link player
             if not self._is_user(gs.players, user):
                 gs.players.append(user)
@@ -192,7 +190,7 @@ class GameManager(Manager):
         # broadcast overall response
         await sio.emit("game_result", response.json(), to=gid)
 
-        # remove game from src.games
+        # remove game from self.games
         self._games.pop(gid, None)
 
         # leave room

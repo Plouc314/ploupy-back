@@ -1,7 +1,6 @@
 import socketio
-from pydantic import ValidationError
 
-from src.core import ActionException, logged
+from src.core import ActionException
 
 from src.models import core as _c, sio as _s
 from src.models.sio import actions, responses
@@ -236,10 +235,8 @@ async def action_resign_game(us: _s.User, model: actions.ResignGame) -> _c.Respo
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        gs.game.action_resign_game(player)
+        gs.game.action_resign_game(us.user.uid)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
 
@@ -257,14 +254,10 @@ async def action_build_factory(us: _s.User, model: actions.BuildFactory) -> _c.R
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_build_factory(player, model.coord)
+        gs.game.action_build_factory(us.user.uid, model.coord)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("build_factory", response.json(), to=gs.gid)
 
     return _c.Response().json()
 
@@ -280,14 +273,10 @@ async def action_build_turret(us: _s.User, model: actions.BuildTurret) -> _c.Res
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_build_turret(player, model.coord)
+        gs.game.action_build_turret(us.user.uid, model.coord)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("build_turret", response.json(), to=gs.gid)
 
     return _c.Response().json()
 
@@ -303,14 +292,10 @@ async def action_move_probes(us: _s.User, model: actions.MoveProbes) -> _c.Respo
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_move_probes(player, model.ids, model.target)
+        gs.game.action_move_probes(us.user.uid, model.ids, model.target)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("game_state", response.json(), to=gs.gid)
 
     return _c.Response().json()
 
@@ -328,14 +313,10 @@ async def action_explode_probes(
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_explode_probes(player, model.ids)
+        gs.game.action_explode_probes(us.user.uid, model.ids)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("game_state", response.json(), to=gs.gid)
 
     return _c.Response().json()
 
@@ -351,13 +332,9 @@ async def action_probes_attack(us: _s.User, model: actions.ProbesAttack) -> _c.R
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
-    player = gs.game.get_player(us.user.username)
-
     try:
-        response = gs.game.action_probes_attack(player, model.ids)
+        gs.game.action_probes_attack(us.user.uid, model.ids)
     except ActionException as e:
         return _c.Response(success=False, msg=str(e)).json()
-
-    await sio.emit("game_state", response.json(), to=gs.gid)
 
     return _c.Response().json()
