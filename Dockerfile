@@ -25,4 +25,7 @@ RUN pip3 install $(ls | grep *.whl)
 
 ENV RUST_LOG="WARN"
 
+RUN useradd -m myuser
+USER myuser
+
 CMD gunicorn -w 1 -k uvicorn.workers.UvicornWorker src.sio.main:app --bind 0.0.0.0:$PORT
