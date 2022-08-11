@@ -1,8 +1,7 @@
 from pydantic import BaseModel
 
 from src.models import core as _c
-
-from src.game.game import GameRS
+from src.sio import Game
 
 
 class Person(BaseModel):
@@ -101,7 +100,7 @@ class Game(BaseModel):
     """
     spectators (sio users/visitors) that are currently connected
     """
-    game: GameRS
+    game: Game
     """
     Actual game instance
     """

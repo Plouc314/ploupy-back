@@ -1,32 +1,16 @@
 from pydantic import BaseModel
 
-from src.models.core import core
+from src.models.core import core as _c
 import src.models.game.entities as entities
-
-
-class Map(BaseModel):
-    tiles: list[entities.Tile]
 
 
 class MapState(BaseModel):
     tiles: list[entities.TileState] = []
 
 
-class Player(BaseModel):
-    username: str
-    money: int
-    # score: int
-    death: str | None
-    income: int
-    factories: list[entities.Factory]
-    turrets: list[entities.TurretState]
-    probes: list[entities.Probe]
-
-
 class PlayerState(BaseModel):
     username: str
     money: int | None = None
-    # score: int | None = None
     death: str | None = None
     income: int | None = None
     factories: list[entities.FactoryState] = []
@@ -34,13 +18,8 @@ class PlayerState(BaseModel):
     probes: list[entities.ProbeState] = []
 
 
-class Game(BaseModel):
-    config: core.GameConfig
-    map: Map
-    players: list[Player]
-
-
 class GameState(BaseModel):
+    config: _c.GameConfig | None = None
     map: MapState | None = None
     players: list[PlayerState] = []
 
@@ -55,30 +34,6 @@ class GamePlayerStats(BaseModel):
 
 
 class GameResult(BaseModel):
-    ranking: list[core.User]
+    ranking: list[_c.User]
     """players: from best (idx: 0) to worst (idx: -1)"""
     stats: list[GamePlayerStats]
-
-
-class BuildFactoryResponse(BaseModel):
-    username: str
-    money: int
-    factory: entities.Factory
-
-
-class BuildTurretResponse(BaseModel):
-    username: str
-    money: int
-    turret: entities.Turret
-
-
-class BuildProbeResponse(BaseModel):
-    username: str
-    money: int
-    probe: entities.Probe
-
-
-class TurretFireProbeResponse(BaseModel):
-    username: str
-    turret_id: str
-    probe: entities.ProbeState
