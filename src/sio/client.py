@@ -1,4 +1,5 @@
 import os
+import socket
 import aiohttp
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -46,6 +47,7 @@ class Client:
                     return None
                 data = await response.json()
         except aiohttp.ClientError as e:
+            print("WARNING GET", type(e), e)
             return None
 
         if not data.get("success", False):
@@ -74,7 +76,7 @@ class Client:
                     return None
                 data = await response.json()
         except aiohttp.ClientError as e:
-            print("WARNING POST", e)
+            print("WARNING POST", type(e), e)
             return None
 
         if not data.get("success", False):
@@ -83,9 +85,9 @@ class Client:
         return data
 
     async def get_user_auth(self, jwt: str) -> responses.UserAuth | None:
-        '''
+        """
         Return the uid corresponding to the jwt, if valid
-        '''
+        """
         response = await self.get("user-auth", jwt=jwt)
         if response is None:
             return None
