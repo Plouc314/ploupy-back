@@ -2,12 +2,11 @@ import uuid
 
 from src.models import core, game as _g, sio as _s, api as _a
 
-from src.game import GameRS as Game
-
 from .manager import Manager
 from ..client import client
 from ..sio import sio
 from ..job import JobManager
+from ..game import Game
 
 
 class GameManager(Manager):

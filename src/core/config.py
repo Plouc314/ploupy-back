@@ -2,7 +2,7 @@
 Contains global configurations flags
 """
 
-VERSION: str = "0.2.0"
+VERSION: str = "0.2.1"
 """
 Backend version
 """
