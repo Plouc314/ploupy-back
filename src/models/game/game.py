@@ -9,6 +9,7 @@ class MapState(BaseModel):
 
 
 class PlayerState(BaseModel):
+    uid: str
     username: str
     money: int | None = None
     death: str | None = None
@@ -19,6 +20,7 @@ class PlayerState(BaseModel):
 
 
 class GameState(BaseModel):
+    gid: str
     config: _c.GameConfig | None = None
     map: MapState | None = None
     players: list[PlayerState] = []

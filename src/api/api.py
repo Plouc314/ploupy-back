@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Header
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.models import core as _c, api as _a
-from src.core import FirebaseException, ALLOWED_ORIGINS
+from src.core import AuthException, ALLOWED_ORIGINS
 
 import src.api.mmrsystem as mmrsystem
 from .firebase import Firebase
@@ -32,15 +32,26 @@ def ping():
 
 
 @app.get("/api/user-auth")
-def user_auth(jwt: str) -> _a.responses.UserAuth:
+def user_auth(
+    firebase_jwt: str | None = None, bot_jwt: str | None = None
+) -> _a.responses.UserAuth:
     """
     Verify the given id token and if valid,
     return the corresponding uid
     """
-    uid = firebase.auth_jwt(jwt)
+    if firebase_jwt is not None:
+        uid = firebase.auth_firebase_jwt(firebase_jwt)
 
-    if uid is None:
-        return _c.Response(success=False, msg="Invalid id token.")
+        if uid is None:
+            return _c.Response(success=False, msg="Invalid web client id token.")
+
+    elif bot_jwt is not None:
+        try:
+            uid = firebase.auth_bot_jwt(bot_jwt)
+        except AuthException as e:
+            return _c.Response(success=False, msg=str(e))
+    else:
+        return _c.Response(success=False, msg="No id token given.")
 
     return _a.responses.UserAuth(uid=uid)
 
@@ -88,12 +99,11 @@ def user_online(data: _a.args.UserOnline) -> _a.responses.UserOnline:
     Update the last online datetime of the user.
     Set it as now.
     """
-    uid = firebase.auth_jwt(data.jwt)
-    if uid is None:
-        return _c.Response(success=False, msg="Invalid id token")
+    if not firebase.auth_sio_client(data.siotk):
+        return _c.Response(success=False, msg="Invalid socket-io token")
 
     date = datetime.now(tz=timezone.utc)
-    firebase.update_last_online(uid, date)
+    firebase.update_last_online(data.uid, date)
 
     return _c.Response(success=True)
 

@@ -24,14 +24,15 @@ async def connect(sid: str, environ: dict):
     """
     Handle the connection
 
-    Require a `http-jwt` header for auth, else fall back to visitor
+    Require a `http-firebase-jwt` header for web client auth, else fall back to visitor
     """
     if uman.get_user(sid=sid) is not None:
         return False
 
-    jwt = environ.get("HTTP_JWT", None)
+    firebase_jwt = environ.get("HTTP_FIREBASE_JWT", None)
+    bot_jwt = environ.get("HTTP_BOT_JWT", None)
 
-    pers = await uman.connect(sid, jwt)
+    pers = await uman.connect(sid, firebase_jwt=firebase_jwt, bot_jwt=bot_jwt)
 
     if isinstance(pers, _s.User):
         print(pers.user.username, "connected")
@@ -40,6 +41,8 @@ async def connect(sid: str, environ: dict):
 
     await qman.connect()
     await gman.connect()
+
+    await sio.emit("game_state", {"name": "bob"}, to=sid)
 
 
 @sio.event

@@ -84,11 +84,15 @@ class Client:
 
         return data
 
-    async def get_user_auth(self, jwt: str) -> responses.UserAuth | None:
+    async def get_user_auth(
+        self, firebase_jwt: str | None = None, bot_jwt: str | None = None
+    ) -> responses.UserAuth | None:
         """
-        Return the uid corresponding to the jwt, if valid
+        Return the uid corresponding to the given jwt, if valid
         """
-        response = await self.get("user-auth", jwt=jwt)
+        response = await self.get(
+            "user-auth", firebase_jwt=firebase_jwt, bot_jwt=bot_jwt
+        )
         if response is None:
             return None
         return responses.UserAuth(**response)
@@ -97,7 +101,7 @@ class Client:
         """
         Ping api on user online status
         """
-        data = args.UserOnline(jwt=user.jwt)
+        data = args.UserOnline(siotk=self.SIO_TOKEN, uid=user.user.uid)
         response = await self.post("user-online", data)
 
     async def get_user_data(self, uid: str) -> responses.UserData | None:

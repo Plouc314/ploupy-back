@@ -130,6 +130,7 @@ class GameManager(Manager):
 
         # create game
         game = Game(
+            gid,
             [user.user for user in users],
             job_manager,
             mode.config,

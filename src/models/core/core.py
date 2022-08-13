@@ -156,6 +156,7 @@ class User(BaseModel):
     Name of the avatar
     (see ploupy-front `textures.tsx` for possible values)
     """
+    is_bot: bool
     joined_on: datetime
     last_online: datetime
 

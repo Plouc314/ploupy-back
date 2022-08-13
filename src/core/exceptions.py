@@ -8,3 +8,9 @@ class FirebaseException(Exception):
     """
     Exception raised when something goes wrong with firebase
     """
+
+
+class AuthException(Exception):
+    """
+    Exception raised when custom authentification fails
+    """

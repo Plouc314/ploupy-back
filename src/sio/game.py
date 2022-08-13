@@ -17,11 +17,13 @@ except BaseException:
 class Game:
     def __init__(
         self,
+        gid: str,
         users: list[_c.User],
         job_manager: JobManager,
         config: _c.GameConfig,
         on_end_game: Callable[[_g.GameResult, bool], None],
     ):
+        self.gid = gid
         self.users = users  # game players
         self.job_manager = job_manager
         self.config = config
@@ -88,8 +90,12 @@ class Game:
                 return u
 
     def _cast_rs_model(self, raw: dict):
+        raw["gid"] = self.gid
+
         for ps in raw["players"]:
-            ps["username"] = self._get_user(ps.pop("id")).username
+            user = self._get_user(ps.pop("id"))
+            ps["uid"] = user.uid
+            ps["username"] = user.username
 
             probe_states = []
             for fs in ps["factories"]:

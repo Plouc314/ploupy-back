@@ -1,5 +1,6 @@
 import json
 import os
+import jwt
 from datetime import datetime, timezone
 
 import firebase_admin
@@ -7,7 +8,7 @@ from firebase_admin import credentials
 from firebase_admin import db, auth
 
 from src.models import core as _c
-from src.core import FirebaseException
+from src.core import FirebaseException, AuthException
 
 
 class Firebase:
@@ -17,8 +18,8 @@ class Firebase:
 
     def __init__(self):
         self._initialized = False
-        # key: jwt value: uid
-        self._cache_jwts: dict[str, str] = {}
+        # key: token value: uid
+        self._cache_fb_tokens: dict[str, str] = {}
         # key: uid
         self._cache_users: dict[str, _c.User] = {}
         self.auth()
@@ -88,18 +89,18 @@ class Firebase:
         """
         return siotk == self.SIO_TOKEN
 
-    def auth_jwt(self, jwt: str) -> str | None:
+    def auth_firebase_jwt(self, token: str) -> str | None:
         """
         Verify that the given id token is valid
 
         Return the user's `uid` if valid, None otherwise
         """
         # look in cache
-        if jwt in self._cache_jwts.keys():
-            return self._cache_jwts[jwt]
+        if token in self._cache_fb_tokens.keys():
+            return self._cache_fb_tokens[token]
 
         try:
-            response = auth.verify_id_token(jwt)
+            response = auth.verify_id_token(token)
             uid = response["uid"]
 
         # there is about a million things that could go wrong...
@@ -108,7 +109,32 @@ class Firebase:
             return None
 
         # update cache
-        self._cache_jwts[jwt] = uid
+        self._cache_fb_tokens[token] = uid
+
+        return uid
+
+    def auth_bot_jwt(self, token: str) -> str:
+        """
+        Assert that the given token is valid
+
+        Return the user's `uid`
+
+        Raises AuthException if the token is invalid
+        """
+        headers = jwt.get_unverified_header(token)
+        uid = headers.get("uid", None)
+        if uid is None:
+            raise AuthException("Header 'uid' not provided.")
+
+        # get key from db
+        key = db.reference(f"/auth/{uid}/bot_key").get()
+        if key is None:
+            raise AuthException(f"No key for given uid.")
+
+        try:
+            jwt.decode(token, key, algorithms="HS256")
+        except jwt.exceptions.InvalidSignatureError:
+            raise AuthException("Invalid key")
 
         return uid
 
