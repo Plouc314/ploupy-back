@@ -20,6 +20,11 @@ class GameState(BaseModel):
     gid: str
 
 
+class SendQueueInvitation(BaseModel):
+    qid: str
+    uid: str
+
+
 class ResignGame(BaseModel):
     pass
 

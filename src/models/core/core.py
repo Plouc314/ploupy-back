@@ -157,8 +157,28 @@ class User(BaseModel):
     (see ploupy-front `textures.tsx` for possible values)
     """
     is_bot: bool
+    owner: str | None
+    """
+    In case the user is a bot:
+    store the uid of its owner
+    """
+    bots: list[str]
+    """
+    List of bots uid
+    """
     joined_on: datetime
     last_online: datetime
+
+
+class UserKeys(BaseModel):
+    """
+    Represent keys of a user
+    """
+
+    bot_key: str
+    """
+    Key to connect as a bot (require user to be a bot)
+    """
 
 
 class GameMode(BaseModel):

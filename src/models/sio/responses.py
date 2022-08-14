@@ -39,6 +39,14 @@ class StartGame(_c.Response):
     gid: str
 
 
+class QueueInvitation(_c.Response):
+    """
+    Represents an invitation to a queue
+    """
+
+    qid: str
+
+
 class GameResults(_c.Response):
     """
     Represents the results of a game

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from ..core.exceptions import BotCreationException
 
 from src.models import core as _c, api as _a
 from src.core import AuthException, ALLOWED_ORIGINS
@@ -79,7 +80,7 @@ def user_data(
 
 
 @app.post("/api/create-user")
-def create_user(data: _a.args.CreateUser) -> _a.responses.CreateUser:
+def create_user(data: _a.args.CreateUser) -> _c.Response:
     """
     Create the user if possible and return if it was succesful
     """
@@ -93,8 +94,25 @@ def create_user(data: _a.args.CreateUser) -> _a.responses.CreateUser:
     return _c.Response(success=True)
 
 
+@app.post("/api/create-bot")
+def create_bot(data: _a.args.CreateBot) -> _a.responses.CreateBot:
+    """
+    Create the bot if possible and return if it was succesful
+    """
+    user = firebase.get_user(uid=data.creator_uid)
+    if user is None:
+        return _c.Response(success=False, msg=f"User not found.")
+
+    try:
+        bot, token = firebase.create_bot(user, data.username)
+    except BotCreationException as e:
+        return _c.Response(success=False, msg=str(e))
+
+    return _a.responses.CreateBot(bot=bot, bot_jwt=token)
+
+
 @app.post("/api/user-online")
-def user_online(data: _a.args.UserOnline) -> _a.responses.UserOnline:
+def user_online(data: _a.args.UserOnline) -> _c.Response:
     """
     Update the last online datetime of the user.
     Set it as now.

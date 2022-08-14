@@ -1,14 +1,18 @@
 import json
 import os
+import uuid
 import jwt
 from datetime import datetime, timezone
 
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db, auth
+from ..core.exceptions import BotCreationException
 
 from src.models import core as _c
 from src.core import FirebaseException, AuthException
+
+MAX_BOT_PER_USER = 5
 
 
 class Firebase:
@@ -127,7 +131,7 @@ class Firebase:
             raise AuthException("Header 'uid' not provided.")
 
         # get key from db
-        key = db.reference(f"/auth/{uid}/bot_key").get()
+        key = db.reference(f"/keys/{uid}/bot_key").get()
         if key is None:
             raise AuthException(f"No key for given uid.")
 
@@ -138,9 +142,17 @@ class Firebase:
 
         return uid
 
+    def create_bot_jwt(self, bot: _c.User, keys: _c.UserKeys) -> str:
+        """
+        Create the jwt token for the given key
+        """
+        return jwt.encode({}, keys.bot_key, algorithm="HS256", headers={"uid": bot.uid})
+
     def create_user(self, user: _c.User) -> None:
         """
-        Create a user in the db
+        Create a user in the db.
+
+        NOTE: no assertions are performed
         """
         # build dict without uid
         # rely on pydantic for datetime conversions (NOPE)
@@ -154,6 +166,14 @@ class Firebase:
 
         # add to cache
         self._cache_users[user.uid] = user
+
+    def _cast_db_user(self, uid: str, raw: dict) -> _c.User:
+        """
+        Cast raw db data to user
+        """
+        # add potentially missing fields
+        raw = {"uid": uid, "owner": None, "bots": []} | raw
+        return _c.User(**raw)
 
     def get_user(
         self, uid: str | None = None, username: str | None = None, error: str = "ignore"
@@ -176,8 +196,7 @@ class Firebase:
                 else:
                     raise FirebaseException(f"User data not found for uid: '{uid}'")
 
-            data["uid"] = uid
-            user = _c.User(**data)
+            user = self._cast_db_user(uid, data)
 
             self._cache_users[uid] = user
             return user
@@ -205,14 +224,60 @@ class Firebase:
                     )
 
             for uid, data in results.items():
-                data["uid"] = uid
                 break
-            user = _c.User(**data)
+            user = self._cast_db_user(uid, data)
 
             self._cache_users[uid] = user
             return user
 
         return None
+
+    def create_bot(self, user: _c.User, username: str) -> tuple[_c.User, str]:
+        """
+        Create a bot in the db if possible
+
+        Returns the bot's user, the bot jwt token
+
+        Raises BotCreationException if not possible
+        """
+        # assert do not cross bots limit
+        if len(user.bots) >= MAX_BOT_PER_USER:
+            raise BotCreationException("Maximum bots limit reached.")
+
+        # assert username unicity
+        existing_user = self.get_user(username=username)
+        if existing_user is not None:
+            raise BotCreationException(f"Username {username} is already taken.")
+
+        # create bot user
+        uid = uuid.uuid4().hex
+        bot = _c.User(
+            uid=uid,
+            username=username,
+            email=user.email,
+            avatar="penguin",
+            is_bot=True,
+            owner=user.uid,
+            bots=[],
+            joined_on=datetime.now(tz=timezone.utc),
+            last_online=datetime.now(tz=timezone.utc),
+        )
+
+        # push it to db
+        self.create_user(bot)
+
+        # create bot key
+        keys = _c.UserKeys(bot_key=uuid.uuid4().hex)
+        # push them to db
+        db.reference(f"/keys/{uid}").set(keys.dict())
+
+        # add bot to user
+        user.bots.append(uid)
+
+        # update user on db
+        db.reference(f"users/{user.uid}/bots").set(user.bots)
+
+        return bot, self.create_bot_jwt(bot, keys)
 
     def update_last_online(self, uid: str, last_online: datetime):
         """

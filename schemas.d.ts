@@ -28,7 +28,7 @@ type DB = {
     config: Config
     users: Record<UID, User>
     stats: Record<UID, UserStats>
-    auth: Record<UID, UserAuth>
+    keys: Record<UID, UserKeys>
 }
 
 /**
@@ -60,6 +60,8 @@ type User = {
     avatar: string
     joined_on: DateTime
     last_online: DateTime
+    owner: string | null
+    bots: string[]
 }
 
 /**
@@ -109,11 +111,11 @@ type GameStats = {
 }
 
 /**
- * Contains auth informations for a user
+ * Contains informations of keys for a user
  * 
- * @path /auth/{uid}
+ * @path /keys/{uid}
  */
-type UserAuth = {
+type UserKeys = {
     /**
      * Key used to connect as a bot
      */

@@ -10,6 +10,12 @@ class FirebaseException(Exception):
     """
 
 
+class BotCreationException(FirebaseException):
+    """
+    Exception raised when the creation of a bot fails
+    """
+
+
 class AuthException(Exception):
     """
     Exception raised when custom authentification fails

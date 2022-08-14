@@ -42,8 +42,6 @@ async def connect(sid: str, environ: dict):
     await qman.connect()
     await gman.connect()
 
-    await sio.emit("game_state", {"name": "bob"}, to=sid)
-
 
 @sio.event
 async def disconnect(sid: str):
@@ -173,6 +171,37 @@ async def leave_queue(us: _s.User, model: actions.LeaveQueue) -> _c.Response:
 
     # broadcast queue state
     await sio.emit("man_queue_state", qman.get_response([queue]).json())
+
+    return _c.Response().json()
+
+
+@sio.on("send_queue_invitation")
+@deco.with_user(uman)
+@deco.with_model(actions.SendQueueInvitation)
+async def send_queue_invitation(
+    us: _s.User, model: actions.SendQueueInvitation
+) -> _c.Response:
+    """
+    Send an invitation to a user to join a queue
+    """
+    queue = qman.get_queue(model.qid)
+
+    if queue is None:
+        return _c.Response(
+            success=False, msg=f"Queue not found (qid: {model.qid})"
+        ).json()
+
+    target_user = uman.get_user(uid=model.uid)
+    if target_user is None:
+        return _c.Response(success=False, msg=f"Invited user not connected.").json()
+
+    print("send queue invitation")
+
+    await sio.emit(
+        "queue_invitation",
+        responses.QueueInvitation(qid=queue.qid).json(),
+        to=target_user.sid,
+    )
 
     return _c.Response().json()
 

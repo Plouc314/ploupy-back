@@ -61,17 +61,17 @@ class UserManager(Manager):
             await sio.emit("man_user_state", self.get_user_response(pers, False).json())
 
     def get_user(
-        self, sid: str | None = None, username: str | None = None
+        self, sid: str | None = None, uid: str | None = None
     ) -> _s.User | None:
         """
-        Get a sio user either by sid or username,
+        Get a sio user either by sid or uid,
         return None if user not found
         """
         if sid is not None:
             return self._users.get(sid, None)
-        if username is not None:
+        if uid is not None:
             for user in self._users.values():
-                if user.user.username == username:
+                if user.user.uid == uid:
                     return user
             return None
         return None
