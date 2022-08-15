@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from ..core.exceptions import BotCreationException
+from ..core.exceptions import BotCreationException, FirebaseException
 
 from src.models import core as _c, api as _a
 from src.core import AuthException, ALLOWED_ORIGINS
@@ -85,6 +85,11 @@ def create_user(data: _a.args.CreateUser) -> _c.Response:
     Create the user if possible and return if it was succesful
     """
 
+    try:
+        firebase.assert_username_valid(data.username)
+    except FirebaseException as e:
+        return _c.Response(success=False, msg=str(e))
+
     if firebase.get_user(uid=data.uid) is not None:
         return _c.Response(success=False, msg=f"User already exists")
 
@@ -105,7 +110,7 @@ def create_bot(data: _a.args.CreateBot) -> _a.responses.CreateBot:
 
     try:
         bot, token = firebase.create_bot(user, data.username)
-    except BotCreationException as e:
+    except FirebaseException as e:
         return _c.Response(success=False, msg=str(e))
 
     return _a.responses.CreateBot(bot=bot, bot_jwt=token)

@@ -195,13 +195,32 @@ async def send_queue_invitation(
     if target_user is None:
         return _c.Response(success=False, msg=f"Invited user not connected.").json()
 
-    print("send queue invitation")
-
     await sio.emit(
         "queue_invitation",
         responses.QueueInvitation(qid=queue.qid).json(),
         to=target_user.sid,
     )
+
+    return _c.Response().json()
+
+
+@sio.on("disconnect_bot")
+@deco.with_user(uman)
+@deco.with_model(actions.DisconnectBot)
+async def send_queue_invitation(
+    us: _s.User, model: actions.DisconnectBot
+) -> _c.Response:
+    """
+    Disconnect a bot of the user
+    """
+    if model.bot_uid not in us.user.bots:
+        return _c.Response(success=False, msg=f"Bot uid is invalid.").json()
+
+    bot = uman.get_user(uid=model.bot_uid)
+    if bot is None:
+        return _c.Response(success=False, msg=f"Bot is offline.").json()
+
+    await sio.disconnect(bot.sid)
 
     return _c.Response().json()
 

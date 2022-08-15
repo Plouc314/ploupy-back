@@ -7,12 +7,13 @@ from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db, auth
-from ..core.exceptions import BotCreationException
+from ..core.exceptions import BotCreationException, InvalidUsernameException
 
 from src.models import core as _c
 from src.core import FirebaseException, AuthException
 
 MAX_BOT_PER_USER = 5
+MIN_LEN_USERNAME = 5
 
 
 class Firebase:
@@ -148,6 +149,19 @@ class Firebase:
         """
         return jwt.encode({}, keys.bot_key, algorithm="HS256", headers={"uid": bot.uid})
 
+    def assert_username_valid(self, username: str) -> None:
+        """
+        Raises InvalidUsernameException if the username is invalid
+        """
+        # assert min length
+        if len(username) < MIN_LEN_USERNAME:
+            raise InvalidUsernameException(f"Username {username} is too short.")
+
+        # assert username unicity
+        existing_user = self.get_user(username=username)
+        if existing_user is not None:
+            raise InvalidUsernameException(f"Username {username} is already taken.")
+
     def create_user(self, user: _c.User) -> None:
         """
         Create a user in the db.
@@ -244,10 +258,7 @@ class Firebase:
         if len(user.bots) >= MAX_BOT_PER_USER:
             raise BotCreationException("Maximum bots limit reached.")
 
-        # assert username unicity
-        existing_user = self.get_user(username=username)
-        if existing_user is not None:
-            raise BotCreationException(f"Username {username} is already taken.")
+        self.assert_username_valid(username)
 
         # create bot user
         uid = uuid.uuid4().hex

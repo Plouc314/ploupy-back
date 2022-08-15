@@ -10,6 +10,12 @@ class FirebaseException(Exception):
     """
 
 
+class InvalidUsernameException(FirebaseException):
+    """
+    Exception raised when the username is invalid
+    """
+
+
 class BotCreationException(FirebaseException):
     """
     Exception raised when the creation of a bot fails

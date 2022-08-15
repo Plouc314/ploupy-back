@@ -25,6 +25,10 @@ class SendQueueInvitation(BaseModel):
     uid: str
 
 
+class DisconnectBot(BaseModel):
+    bot_uid: str
+
+
 class ResignGame(BaseModel):
     pass
 
