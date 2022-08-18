@@ -8,3 +8,21 @@ class FirebaseException(Exception):
     """
     Exception raised when something goes wrong with firebase
     """
+
+
+class InvalidUsernameException(FirebaseException):
+    """
+    Exception raised when the username is invalid
+    """
+
+
+class BotCreationException(FirebaseException):
+    """
+    Exception raised when the creation of a bot fails
+    """
+
+
+class AuthException(Exception):
+    """
+    Exception raised when custom authentification fails
+    """

@@ -39,6 +39,14 @@ class StartGame(_c.Response):
     gid: str
 
 
+class QueueInvitation(_c.Response):
+    """
+    Represents an invitation to a queue
+    """
+
+    qid: str
+
+
 class GameResults(_c.Response):
     """
     Represents the results of a game
@@ -46,6 +54,7 @@ class GameResults(_c.Response):
     and the mmrs updates.
     """
 
+    gid: str
     ranking: list[_c.User]
     """players: from best (idx: 0) to worst (idx: -1)"""
     stats: list[_g.GamePlayerStats]

@@ -14,7 +14,9 @@ class UserManager(Manager):
         self._users: dict[str, _s.User] = {}
         self._visitors: dict[str, _s.Visitor] = {}
 
-    async def connect(self, sid: str, jwt: str | None = None) -> _s.User | _s.Visitor:
+    async def connect(
+        self, sid: str, firebase_jwt: str | None = None, bot_jwt: str | None = None
+    ) -> _s.User | _s.Visitor:
         """
         - Verify jwt auth
         - If auth successful get user data
@@ -23,7 +25,10 @@ class UserManager(Manager):
 
         Return the sio.User / sio.Visitor
         """
-        response = await client.get_user_auth(jwt)
+        response = await client.get_user_auth(
+            firebase_jwt=firebase_jwt,
+            bot_jwt=bot_jwt,
+        )
         if response is None:
             visitor = _s.Visitor(sid=sid)
             self._visitors[sid] = visitor
@@ -35,7 +40,7 @@ class UserManager(Manager):
             self._visitors[sid] = visitor
             return visitor
 
-        user_sio = _s.User(sid=sid, jwt=jwt, user=response.user)
+        user_sio = _s.User(sid=sid, user=response.user)
         self._users[sid] = user_sio
 
         await sio.emit("man_user_state", self.get_user_response(user_sio, True).json())
@@ -56,17 +61,17 @@ class UserManager(Manager):
             await sio.emit("man_user_state", self.get_user_response(pers, False).json())
 
     def get_user(
-        self, sid: str | None = None, username: str | None = None
+        self, sid: str | None = None, uid: str | None = None
     ) -> _s.User | None:
         """
-        Get a sio user either by sid or username,
+        Get a sio user either by sid or uid,
         return None if user not found
         """
         if sid is not None:
             return self._users.get(sid, None)
-        if username is not None:
+        if uid is not None:
             for user in self._users.values():
-                if user.user.username == username:
+                if user.user.uid == uid:
                     return user
             return None
         return None

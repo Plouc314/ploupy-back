@@ -16,15 +16,30 @@ class CreateUser(BaseModel):
     joined_on: datetime
 
 
+class CreateBot(BaseModel):
+    creator_uid: str
+    """
+    uid of the bot creator
+    """
+    username: str
+    """
+    Username of the bot
+    """
+
+
 class UserOnline(BaseModel):
-    jwt: str
+    siotk: str
+    """
+    Token of the socket-io server
+    """
+    uid: str
 
 
 class GameResults(BaseModel):
 
     siotk: str
     """
-    Token of the socket-io client
+    Token of the socket-io server
     """
 
     gmid: str

@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Header
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from ..core.exceptions import BotCreationException, FirebaseException
 
 from src.models import core as _c, api as _a
-from src.core import FirebaseException, ALLOWED_ORIGINS
+from src.core import AuthException, ALLOWED_ORIGINS
 
 import src.api.mmrsystem as mmrsystem
 from .firebase import Firebase
@@ -32,15 +33,26 @@ def ping():
 
 
 @app.get("/api/user-auth")
-def user_auth(jwt: str) -> _a.responses.UserAuth:
+def user_auth(
+    firebase_jwt: str | None = None, bot_jwt: str | None = None
+) -> _a.responses.UserAuth:
     """
     Verify the given id token and if valid,
     return the corresponding uid
     """
-    uid = firebase.auth_jwt(jwt)
+    if firebase_jwt is not None:
+        uid = firebase.auth_firebase_jwt(firebase_jwt)
 
-    if uid is None:
-        return _c.Response(success=False, msg="Invalid id token.")
+        if uid is None:
+            return _c.Response(success=False, msg="Invalid web client id token.")
+
+    elif bot_jwt is not None:
+        try:
+            uid = firebase.auth_bot_jwt(bot_jwt)
+        except AuthException as e:
+            return _c.Response(success=False, msg=str(e))
+    else:
+        return _c.Response(success=False, msg="No id token given.")
 
     return _a.responses.UserAuth(uid=uid)
 
@@ -68,10 +80,15 @@ def user_data(
 
 
 @app.post("/api/create-user")
-def create_user(data: _a.args.CreateUser) -> _a.responses.CreateUser:
+def create_user(data: _a.args.CreateUser) -> _c.Response:
     """
     Create the user if possible and return if it was succesful
     """
+
+    try:
+        firebase.assert_username_valid(data.username)
+    except FirebaseException as e:
+        return _c.Response(success=False, msg=str(e))
 
     if firebase.get_user(uid=data.uid) is not None:
         return _c.Response(success=False, msg=f"User already exists")
@@ -82,18 +99,34 @@ def create_user(data: _a.args.CreateUser) -> _a.responses.CreateUser:
     return _c.Response(success=True)
 
 
+@app.post("/api/create-bot")
+def create_bot(data: _a.args.CreateBot) -> _a.responses.CreateBot:
+    """
+    Create the bot if possible and return if it was succesful
+    """
+    user = firebase.get_user(uid=data.creator_uid)
+    if user is None:
+        return _c.Response(success=False, msg=f"User not found.")
+
+    try:
+        bot, token = firebase.create_bot(user, data.username)
+    except FirebaseException as e:
+        return _c.Response(success=False, msg=str(e))
+
+    return _a.responses.CreateBot(bot=bot, bot_jwt=token)
+
+
 @app.post("/api/user-online")
-def user_online(data: _a.args.UserOnline) -> _a.responses.UserOnline:
+def user_online(data: _a.args.UserOnline) -> _c.Response:
     """
     Update the last online datetime of the user.
     Set it as now.
     """
-    uid = firebase.auth_jwt(data.jwt)
-    if uid is None:
-        return _c.Response(success=False, msg="Invalid id token")
+    if not firebase.auth_sio_client(data.siotk):
+        return _c.Response(success=False, msg="Invalid socket-io token")
 
     date = datetime.now(tz=timezone.utc)
-    firebase.update_last_online(uid, date)
+    firebase.update_last_online(data.uid, date)
 
     return _c.Response(success=True)
 

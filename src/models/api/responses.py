@@ -15,12 +15,9 @@ class UserData(_c.Response):
     mmrs: _c.UserMMRs
 
 
-class CreateUser(_c.Response):
-    pass
-
-
-class UserOnline(_c.Response):
-    pass
+class CreateBot(_c.Response):
+    bot: _c.User
+    bot_jwt: str
 
 
 class GameMode(_c.Response):

@@ -28,6 +28,7 @@ type DB = {
     config: Config
     users: Record<UID, User>
     stats: Record<UID, UserStats>
+    keys: Record<UID, UserKeys>
 }
 
 /**
@@ -59,6 +60,8 @@ type User = {
     avatar: string
     joined_on: DateTime
     last_online: DateTime
+    owner: string | null
+    bots: string[]
 }
 
 /**
@@ -105,6 +108,18 @@ type GameStats = {
      * sorted by resulting position, i.e. best (index 0) to worst
      */
     ranking: UID[]
+}
+
+/**
+ * Contains informations of keys for a user
+ * 
+ * @path /keys/{uid}
+ */
+type UserKeys = {
+    /**
+     * Key used to connect as a bot
+     */
+    bot_key: string
 }
 
 /**
