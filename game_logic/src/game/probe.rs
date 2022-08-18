@@ -5,7 +5,7 @@ use super::{
     geometry, Delayer, GameConfig, Identifiable, Map, State, StateHandler, NOT_IDENTIFIABLE,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ProbePolicy {
     Farm,
     Attack,
@@ -30,6 +30,7 @@ pub struct ProbeState {
     pub death: Option<ProbeDeathCause>,
     pub pos: Option<Point>,
     pub target: Option<Coord>,
+    pub policy: Option<ProbePolicy>,
     /// Specify that the probe should be created
     /// Internal to rust implementation
     just_created: bool,
@@ -50,6 +51,7 @@ impl State for ProbeState {
             death: None,
             pos: None,
             target: None,
+            policy: None,
             just_created: false,
         }
     }
@@ -82,6 +84,7 @@ impl ProbeState {
             death: None,
             pos: Some(pos),
             target: None,
+            policy: Some(ProbePolicy::Farm),
             just_created: true,
         }
     }
@@ -138,6 +141,7 @@ impl Probe {
             death: None,
             pos: Some(self.pos.clone()),
             target: Some(self.target.as_coord()),
+            policy: Some(self.policy.clone()),
             just_created: false,
         }
     }
@@ -179,10 +183,7 @@ impl Probe {
             }
         };
         let target = target.as_point();
-        // in case the target has changed -> update current state
-        if target != self.target {
-            self.state_handle.get_mut().target = Some(target.as_coord());
-        }
+        self.state_handle.get_mut().target = Some(target.as_coord());
         self.set_target_manually(target);
     }
 
@@ -205,6 +206,7 @@ impl Probe {
     pub fn set_farm_target(&mut self, target: Point) {
         self.state_handle.get_mut().pos = Some(self.pos.clone());
         self.state_handle.get_mut().target = Some(target.as_coord());
+        self.state_handle.get_mut().policy = Some(ProbePolicy::Farm);
         self.policy = ProbePolicy::Farm;
         self.set_target_manually(target);
     }
@@ -213,6 +215,7 @@ impl Probe {
     /// Update current state, move direction, travel delayer, policy
     pub fn set_attack(&mut self, player_id: u128, map: &mut Map) {
         self.state_handle.get_mut().pos = Some(self.pos.clone());
+        self.state_handle.get_mut().policy = Some(ProbePolicy::Attack);
         self.policy = ProbePolicy::Attack;
         self.select_attack_target(player_id, map);
     }

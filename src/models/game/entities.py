@@ -22,6 +22,8 @@ class ProbeState(BaseModel):
     pos: core.Point | None = None
     death: str | None = None
     target: core.Point | None = None
+    policy: str | None = None
+    """May be: Farm or Attack"""
 
 
 class TurretState(BaseModel):

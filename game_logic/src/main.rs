@@ -5,7 +5,7 @@ use game::Game;
 use game::GameConfig;
 
 fn display(origin: &Coord, coords: &Vec<Coord>) {
-    let mut chars = vec![vec![' '; 10]; 10];
+    let mut chars = vec![vec![' '; 30]; 30];
 
     chars[origin.x as usize][origin.y as usize] = 'X';
     for coord in coords.iter() {
@@ -52,9 +52,15 @@ fn test_game() {
 }
 
 fn main() {
-    let a = vec![1, 2, 3];
-    let b = vec![4, 5, 6];
-    for v in a.iter().chain(b.iter()) {
-        println!("{}", v);
+    let origin = Coord::new(18, 10);
+    let mut coords = Vec::new();
+    let mut i = 0;
+    for coord in game::iter_vortex(&origin) {
+        coords.push(coord);
+        i += 1;
+        if i == 50 {
+            break;
+        }
     }
+    display(&origin, &coords);
 }

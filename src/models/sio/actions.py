@@ -30,20 +30,23 @@ class DisconnectBot(BaseModel):
 
 
 class ResignGame(BaseModel):
-    pass
+    gid: str
 
 
 class BuildFactory(BaseModel):
+    gid: str
     coord: core.Point
     """Coordinate where to build the factory"""
 
 
 class BuildTurret(BaseModel):
+    gid: str
     coord: core.Point
     """Coordinate where to build the turret"""
 
 
 class MoveProbes(BaseModel):
+    gid: str
     ids: list[str]
     """List of the ids of each probe to move"""
     target: core.Point
@@ -51,10 +54,12 @@ class MoveProbes(BaseModel):
 
 
 class ExplodeProbes(BaseModel):
+    gid: str
     ids: list[str]
     """List of the ids of each probe to explode"""
 
 
 class ProbesAttack(BaseModel):
+    gid: str
     ids: list[str]
     """List of the ids of each probe that will attack"""

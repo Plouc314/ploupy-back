@@ -52,16 +52,20 @@ class GameManager(Manager):
         self, gid: str | None = None, user: core.User | None = None
     ) -> _s.Game | None:
         """
-        Get a sio game either by gid or by a uid (not necessarily connected),
+        Get a sio game either by gid,
         return None if game not found
         """
-        if gid is not None:
-            return self._games.get(gid, None)
-        if user is not None:
-            for game in self._games.values():
-                if game.game.is_player(user.uid):
-                    return game
-        return None
+        return self._games.get(gid, None)
+
+    def get_user_games(self, user: core.User) -> list[_s.Game]:
+        """
+        Return the sio games of a user (by uid) (not necessarily connected)
+        """
+        games = []
+        for game in self._games.values():
+            if game.game.is_player(user.uid):
+                games.append(game)
+        return games
 
     def add_game(
         self, gid: str, game: Game, users: list[_s.User], mode: core.GameMode
@@ -93,7 +97,7 @@ class GameManager(Manager):
         if not self._is_pers(gs.spectators, visitor):
             gs.spectators.append(visitor)
 
-        visitor.gid = gs.gid
+        visitor.gids.add(gs.gid)
         sio.enter_room(visitor.sid, room=gs.gid)
 
     def link_user_to_game(self, gs: _s.Game, user: _s.User):
@@ -114,7 +118,7 @@ class GameManager(Manager):
             if not self._is_user(gs.spectators, user):
                 gs.spectators.append(user)
 
-        user.gid = gs.gid
+        user.gids.add(gs.gid)
         sio.enter_room(user.sid, room=gs.gid)
 
     async def create_game(self, users: list[_s.User], mode: core.GameMode):
@@ -181,6 +185,7 @@ class GameManager(Manager):
 
         # build sio response (merge game/api data)
         response = _s.responses.GameResults(
+            gid=gid,
             ranking=results.ranking,
             stats=results.stats,
             mmrs=mmrs,
@@ -195,10 +200,10 @@ class GameManager(Manager):
 
         # leave room
         for user in gs.players:
-            user.gid = None
+            user.gids.remove(gs.gid)
             sio.leave_room(user.sid, room=gid)
         for pers in gs.spectators:
-            pers.gid = None
+            pers.gids.remove(gs.gid)
             sio.leave_room(pers.sid, room=gid)
 
         # broadcast game state
@@ -212,30 +217,30 @@ class GameManager(Manager):
     async def disconnect(self, pers: _s.Person):
         """
         Disconnect the sio.Person from the game
-        NOTE: do NOT RESIGN the game for the user
+        NOTE: do NOT RESIGN the games for the user
 
-        In case nobody is connected to the game anymore,
-        end the game
+        In case nobody is connected to the games anymore,
+        end the games
         """
+        for gid in pers.gids:
+            gs = self.get_game(gid=gid)
+            if gs is None:
+                return
 
-        gs = self.get_game(gid=pers.gid)
-        if gs is None:
-            return
+            # NOTE: references mismatch so use sid
+            # remove players user
+            for u in gs.players:
+                if u.sid == pers.sid:
+                    gs.players.remove(u)
+                    break
+            # remove spectator user
+            for p in gs.spectators:
+                if p.sid == pers.sid:
+                    gs.spectators.remove(p)
+                    break
 
-        # NOTE: references mismatch so use sid
-        # remove players user
-        for u in gs.players:
-            if u.sid == pers.sid:
-                gs.players.remove(u)
-                break
-        # remove spectator user
-        for p in gs.spectators:
-            if p.sid == pers.sid:
-                gs.spectators.remove(p)
-                break
-
-        if len(gs.players) == 0 and len(gs.spectators) == 0:
-            gs.game.end_game(aborted=True)
+            if len(gs.players) == 0 and len(gs.spectators) == 0:
+                gs.game.end_game(aborted=True)
 
     @property
     def state(self) -> _s.responses.GameManagerState:

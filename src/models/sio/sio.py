@@ -1,7 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.models import core as _c
-from src.sio import Game
+from src.sio import Game as RsGame
 
 
 class Person(BaseModel):
@@ -12,8 +12,8 @@ class Person(BaseModel):
 
     sid: str
     """socketio id for user session"""
-    gid: str | None = None
-    """game id of currently spectated/played game"""
+    gids: set[str] = Field(default_factory=set)
+    """game ids of currently spectated/played games"""
 
 
 class Visitor(Person):
@@ -95,7 +95,7 @@ class Game(BaseModel):
     """
     spectators (sio users/visitors) that are currently connected
     """
-    game: Game
+    game: RsGame
     """
     Actual game instance
     """

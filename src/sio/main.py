@@ -229,24 +229,19 @@ async def send_queue_invitation(
 @deco.with_user(uman)
 async def is_active_game(us: _s.User, data: dict) -> _c.Response:
     """
-    Check if the user is currently in a game,
+    Check if the user is currently in some game(s),
     if it is the case, broadcast a "start_game" event with the
-    current game state to the user
-
-    NOTE: if `us.gid` is not None -> return
+    current game state to the user for each game
     """
-    gs = gman.get_game(gid=us.gid)
-    if gs is not None:
-        return _c.Response().json()
+    for gs in gman.get_user_games(us.user):
 
-    gs = gman.get_game(user=us.user)
-    if gs is None:
-        return _c.Response().json()
+        if gs.gid in us.gids:
+            continue
 
-    gman.link_user_to_game(gs, us)
+        gman.link_user_to_game(gs, us)
 
-    # broadcast start game event
-    await sio.emit("start_game", responses.StartGame(gid=gs.gid).json(), to=us.sid)
+        # broadcast start game event
+        await sio.emit("start_game", responses.StartGame(gid=gs.gid).json(), to=us.sid)
 
     return _c.Response().json()
 
@@ -282,7 +277,10 @@ async def action_resign_game(us: _s.User, model: actions.ResignGame) -> _c.Respo
     """
     Action that resign the game for a player
     """
-    gs = gman.get_game(gid=us.gid)
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
@@ -301,7 +299,10 @@ async def action_build_factory(us: _s.User, model: actions.BuildFactory) -> _c.R
     """
     Action that build a new factory
     """
-    gs = gman.get_game(gid=us.gid)
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
@@ -320,7 +321,10 @@ async def action_build_turret(us: _s.User, model: actions.BuildTurret) -> _c.Res
     """
     Action that build a new turret
     """
-    gs = gman.get_game(gid=us.gid)
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
@@ -339,7 +343,10 @@ async def action_move_probes(us: _s.User, model: actions.MoveProbes) -> _c.Respo
     """
     Action that change the position of some probes
     """
-    gs = gman.get_game(gid=us.gid)
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
@@ -360,7 +367,10 @@ async def action_explode_probes(
     """
     Action that explode some probes
     """
-    gs = gman.get_game(gid=us.gid)
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 
@@ -379,7 +389,10 @@ async def action_probes_attack(us: _s.User, model: actions.ProbesAttack) -> _c.R
     """
     Action that make some probes to attack an opponent
     """
-    gs = gman.get_game(gid=us.gid)
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
     if gs is None:
         return _c.Response(success=False, msg="Game not found").json()
 

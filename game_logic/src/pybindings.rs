@@ -142,6 +142,9 @@ impl<'a> AsDict<'a> for ProbeState {
         if let Some(death) = &self.death {
             dict.set_item("death", format!("{:?}", death))?;
         }
+        if let Some(policy) = &self.policy {
+            dict.set_item("policy", format!("{:?}", policy))?;
+        }
 
         set_dict_item(_py, dict, "pos", &self.pos)?;
         set_dict_item(_py, dict, "target", &self.target)?;

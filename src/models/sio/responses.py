@@ -54,6 +54,7 @@ class GameResults(_c.Response):
     and the mmrs updates.
     """
 
+    gid: str
     ranking: list[_c.User]
     """players: from best (idx: 0) to worst (idx: -1)"""
     stats: list[_g.GamePlayerStats]
