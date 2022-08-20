@@ -8,12 +8,8 @@ from pydantic import BaseModel
 from src.models.core import core
 
 
-class CreateUser(BaseModel):
-    uid: str
-    username: str
-    email: str
-    avatar: str
-    joined_on: datetime
+class CreateUser(core.User):
+    last_online: datetime | None = None
 
 
 class CreateBot(BaseModel):

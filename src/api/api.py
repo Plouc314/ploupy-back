@@ -93,7 +93,9 @@ def create_user(data: _a.args.CreateUser) -> _c.Response:
     if firebase.get_user(uid=data.uid) is not None:
         return _c.Response(success=False, msg=f"User already exists")
 
-    user = _c.User(last_online=datetime.now(tz=timezone.utc), **data.dict())
+    data.last_online = datetime.now(tz=timezone.utc)
+
+    user = _c.User(**data.dict())
 
     firebase.create_user(user)
     return _c.Response(success=True)
