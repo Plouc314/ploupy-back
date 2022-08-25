@@ -52,6 +52,12 @@ pub struct GameConfig {
     /// speed of the probe in coordinate/sec
     pub probe_speed: f64,
 
+    /// intensity of claiming when farming
+    pub probe_claim_intensity: u32,
+
+    /// intensity of claiming when exploding
+    pub probe_explosion_intensity: u32,
+
     /// amount to pay to produce one probe
     pub probe_price: f64,
 
@@ -78,6 +84,55 @@ pub struct GameConfig {
     /// as `income = occupation * rate`
     pub income_rate: f64,
 
-    /// probability that a tile with maximum occupation lose 1 occupation
+    /// probability that a tile with maximum occupation lose 2 occupation
     pub deprecate_rate: f64,
+
+    /// how much the probe explosion intensity of claiming
+    /// is increased
+    pub tech_probe_explosion_intensity_increase: u32,
+
+    /// price of probe explosion intensity tech
+    pub tech_probe_explosion_intensity_price: f64,
+
+    /// how much the probe claim intensity is increased (farming)
+    pub tech_probe_claim_intensity_increase: u32,
+
+    /// price of probe claim intensity tech
+    pub tech_probe_claim_intensity_price: f64,
+
+    /// how much the build probe delay is decreased
+    pub tech_factory_build_delay_decrease: f64,
+
+    /// price of factory build delay tech
+    pub tech_factory_build_delay_price: f64,
+
+    /// how much the probe price is decreased
+    pub tech_factory_probe_price_decrease: f64,
+
+    /// price of factory probe price tech
+    pub tech_factory_probe_price_price: f64,
+
+    /// how much the factory max probe is decreased
+    pub tech_factory_max_probe_increase: u32,
+
+    /// price of factory max probe tech
+    pub tech_factory_max_probe_price: f64,
+
+    /// how much the turret scope is increased
+    pub tech_turret_scope_increase: f64,
+
+    /// price of turret scope tech
+    pub tech_turret_scope_price: f64,
+
+    /// how much the turret fire delay is decreased
+    pub tech_turret_fire_delay_decrease: f64,
+
+    /// price of turret fire delay tech
+    pub tech_turret_fire_delay_price: f64,
+
+    /// how much the turret maintenance costs are decreased
+    pub tech_turret_maintenance_costs_decrease: f64,
+
+    /// price of turret maintenance costs tech
+    pub tech_turret_maintenance_costs_price: f64,
 }

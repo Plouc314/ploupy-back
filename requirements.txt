@@ -9,3 +9,4 @@ aiohttp
 aiodns
 maturin
 pyjwt
+colorlog

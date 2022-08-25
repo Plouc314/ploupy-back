@@ -243,17 +243,19 @@ impl Map {
     /// For each tile, if it meets the conditions,
     /// decrease its occupation with a certain probability.
     fn deprecate_tiles(&mut self) {
+        let half = self.config.max_occupation as f64 / 2.0;
         for tile in self.tiles.iter_mut().flat_map(|c| c.iter_mut()) {
-            if tile.occupation <= 5 {
+            let occ = tile.occupation as f64;
+            if occ <= half {
                 continue;
             }
 
             // compute probability
-            let mut prob = (tile.occupation - 5) as f64 / (self.config.max_occupation - 5) as f64;
+            let mut prob = (occ - half) / (self.config.max_occupation as f64 - half);
             prob *= self.config.deprecate_rate;
 
             if random::random() <= prob {
-                tile.decr_occupation();
+                tile.decr_occupation(2);
 
                 let state = TileState::new(&tile);
                 state_vec_insert(&mut self.state_handle.get_mut().tiles, state);
@@ -261,10 +263,11 @@ impl Map {
         }
     }
 
-    /// Claim the tile at the coordinate of the probe \
+    /// Claim the tile at the coordinate of the probe
+    /// with the given intensity \
     /// Store the tile state, potential building death in current state \
     /// Return if it could be done
-    pub fn claim_tile(&mut self, player_id: u128, coord: &Coord) -> bool {
+    pub fn claim_tile(&mut self, player_id: u128, coord: &Coord, intensity: u32) -> bool {
         let tile = self.get_mut_tile(coord);
         let tile = match tile {
             None => {
@@ -277,12 +280,13 @@ impl Map {
         match tile.owner_id {
             None => {
                 tile.set_owner(player_id);
+                tile.incr_occupation(intensity);
             }
             Some(owner_id) => {
                 if owner_id == player_id {
-                    tile.incr_occupation();
+                    tile.incr_occupation(intensity);
                 } else {
-                    tile.decr_occupation();
+                    tile.decr_occupation(intensity);
                     if tile.occupation == 0 {
                         // notify building death
                         if let Some(building_id) = tile.building_id {
@@ -423,23 +427,22 @@ impl Tile {
     }
 
     /// Set the owner of the tile
-    /// Reset the occupation
     pub fn set_owner(&mut self, player_id: u128) {
         self.owner_id = Some(player_id);
-        self.occupation = 1;
     }
 
-    /// Increment tile occupation
-    pub fn incr_occupation(&mut self) {
-        if self.occupation < self.config.max_occupation {
-            self.occupation += 1;
-        }
+    /// Increment tile occupation by `value`
+    pub fn incr_occupation(&mut self, value: u32) {
+        self.occupation = u32::min(self.occupation + value, self.config.max_occupation);
     }
 
-    /// Decrement tile occupation
-    pub fn decr_occupation(&mut self) {
-        if self.occupation > 0 {
-            self.occupation -= 1;
+    /// Decrement tile occupation by `value`
+    pub fn decr_occupation(&mut self, value: u32) {
+        // don't use the max way -> negative value don't exists on unsigned
+        if self.occupation >= value {
+            self.occupation -= value;
+        } else {
+            self.occupation = 0;
         }
     }
 }

@@ -108,6 +108,18 @@ impl Game {
             Ok(v) => Ok(v),
         }
     }
+
+    pub fn action_acquire_tech<'a>(
+        &mut self,
+        _py: Python<'a>,
+        player_id: u128,
+        tech: &str,
+    ) -> PyResult<()> {
+        match self.game.acquire_tech(player_id, tech) {
+            Err(msg) => Err(PyErr::new::<exceptions::PyValueError, _>(msg)),
+            Ok(v) => Ok(v),
+        }
+    }
 }
 
 #[pyfunction]

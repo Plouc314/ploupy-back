@@ -402,3 +402,25 @@ async def action_probes_attack(us: _s.User, model: actions.ProbesAttack) -> _c.R
         return _c.Response(success=False, msg=str(e)).json()
 
     return _c.Response().json()
+
+
+@sio.on("action_acquire_tech")
+@deco.with_user(uman)
+@deco.with_model(actions.AcquireTech)
+async def action_acquire_tech(us: _s.User, model: actions.AcquireTech) -> _c.Response:
+    """
+    Action that acquire the given technology
+    """
+    if not model.gid in us.gids:
+        return _c.Response(success=False, msg="User not in game.").json()
+
+    gs = gman.get_game(gid=model.gid)
+    if gs is None:
+        return _c.Response(success=False, msg="Game not found").json()
+
+    try:
+        gs.game.action_acquire_tech(us.user.uid, model.tech)
+    except ActionException as e:
+        return _c.Response(success=False, msg=str(e)).json()
+
+    return _c.Response().json()

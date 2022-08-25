@@ -1,8 +1,6 @@
 mod game;
 
-use game::Coord;
-use game::Game;
-use game::GameConfig;
+use game::*;
 
 fn display(origin: &Coord, coords: &Vec<Coord>) {
     let mut chars = vec![vec![' '; 30]; 30];
@@ -41,6 +39,24 @@ fn test_game() {
         turret_maintenance_costs: 0.0,
         income_rate: 0.0,
         deprecate_rate: 0.0,
+        tech_probe_explosion_intensity_increase: 0,
+        tech_probe_explosion_intensity_price: 0.0,
+        tech_probe_claim_intensity_increase: 0,
+        tech_probe_claim_intensity_price: 0.0,
+        tech_factory_build_delay_decrease: 0.0,
+        tech_factory_build_delay_price: 0.0,
+        tech_factory_probe_price_decrease: 0.0,
+        tech_factory_probe_price_price: 0.0,
+        tech_factory_max_probe_increase: 0,
+        tech_factory_max_probe_price: 0.0,
+        tech_turret_scope_increase: 0.0,
+        tech_turret_scope_price: 0.0,
+        tech_turret_fire_delay_decrease: 0.0,
+        tech_turret_fire_delay_price: 0.0,
+        tech_turret_maintenance_costs_decrease: 0.0,
+        tech_turret_maintenance_costs_price: 0.0,
+        probe_claim_intensity: 0,
+        probe_explosion_intensity: 0,
     };
     let player_ids = vec![1, 2, 3];
     let mut game = Game::new(player_ids, config);

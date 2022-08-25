@@ -14,6 +14,7 @@ class PlayerState(BaseModel):
     money: int | None = None
     death: str | None = None
     income: int | None = None
+    techs: list[str] = []
     factories: list[entities.FactoryState] = []
     turrets: list[entities.TurretState] = []
     probes: list[entities.ProbeState] = []

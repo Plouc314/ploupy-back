@@ -238,6 +238,19 @@ class Game:
         except ValueError as e:
             raise ActionException(str(e))
 
+    def action_acquire_tech(self, uid: str, tech: str) -> None:
+        """
+        Acquire the probe-explosion-intensity technology
+        """
+        rid = self._ids_map.get(uid)
+        if rid is None:
+            raise ActionException(f"Invalid uid: '{uid}'")
+
+        try:
+            self._game.action_acquire_tech(rid, tech.upper())
+        except ValueError as e:
+            raise ActionException(str(e))
+
     @property
     def model(self) -> _g.GameState:
         """

@@ -199,6 +199,12 @@ impl<'a> AsDict<'a> for PlayerState {
         set_vec_dict_item(_py, dict, "factories", &self.factories)?;
         set_vec_dict_item(_py, dict, "turrets", &self.turrets)?;
 
+        let mut techs = Vec::new();
+        for tech in self.techs.iter() {
+            techs.push(format!("{:?}", tech));
+        }
+        dict.set_item("techs", techs)?;
+
         Ok(dict)
     }
 }
@@ -276,6 +282,8 @@ impl FromDict for GameConfig {
             factory_build_probe_delay: get_item(dict, "factory_build_probe_delay")?,
             max_occupation: get_item(dict, "max_occupation")?,
             probe_speed: get_item(dict, "probe_speed")?,
+            probe_claim_intensity: get_item(dict, "probe_claim_intensity")?,
+            probe_explosion_intensity: get_item(dict, "probe_explosion_intensity")?,
             probe_price: get_item(dict, "probe_price")?,
             probe_claim_delay: get_item(dict, "probe_claim_delay")?,
             probe_maintenance_costs: get_item(dict, "probe_maintenance_costs")?,
@@ -285,6 +293,37 @@ impl FromDict for GameConfig {
             turret_maintenance_costs: get_item(dict, "turret_maintenance_costs")?,
             income_rate: get_item(dict, "income_rate")?,
             deprecate_rate: get_item(dict, "deprecate_rate")?,
+            tech_probe_explosion_intensity_increase: get_item(
+                dict,
+                "tech_probe_explosion_intensity_increase",
+            )?,
+            tech_probe_explosion_intensity_price: get_item(
+                dict,
+                "tech_probe_explosion_intensity_price",
+            )?,
+            tech_probe_claim_intensity_increase: get_item(
+                dict,
+                "tech_probe_claim_intensity_increase",
+            )?,
+            tech_probe_claim_intensity_price: get_item(dict, "tech_probe_claim_intensity_price")?,
+            tech_factory_build_delay_decrease: get_item(dict, "tech_factory_build_delay_decrease")?,
+            tech_factory_build_delay_price: get_item(dict, "tech_factory_build_delay_price")?,
+            tech_factory_probe_price_decrease: get_item(dict, "tech_factory_probe_price_decrease")?,
+            tech_factory_probe_price_price: get_item(dict, "tech_factory_probe_price_price")?,
+            tech_factory_max_probe_increase: get_item(dict, "tech_factory_max_probe_increase")?,
+            tech_factory_max_probe_price: get_item(dict, "tech_factory_max_probe_price")?,
+            tech_turret_scope_increase: get_item(dict, "tech_turret_scope_increase")?,
+            tech_turret_scope_price: get_item(dict, "tech_turret_scope_price")?,
+            tech_turret_fire_delay_decrease: get_item(dict, "tech_turret_fire_delay_decrease")?,
+            tech_turret_fire_delay_price: get_item(dict, "tech_turret_fire_delay_price")?,
+            tech_turret_maintenance_costs_decrease: get_item(
+                dict,
+                "tech_turret_maintenance_costs_decrease",
+            )?,
+            tech_turret_maintenance_costs_price: get_item(
+                dict,
+                "tech_turret_maintenance_costs_price",
+            )?,
         })
     }
 }
