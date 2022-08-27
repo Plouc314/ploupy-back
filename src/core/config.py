@@ -2,12 +2,12 @@
 Contains global configurations flags
 """
 
-VERSION: str = "0.3.1"
+VERSION: str = "0.4.0"
 """
 Backend version
 """
 
-FLAG_DEPLOY: bool = False
+FLAG_DEPLOY: bool = True
 """
 Flag that indicates whether the backend is deploy or dev mode
 """
