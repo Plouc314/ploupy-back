@@ -6,6 +6,7 @@ from src.models.core import core
 class CreateQueue(BaseModel):
     gmid: str
     """game mode id"""
+    metadata: core.GameMetadata
 
 
 class JoinQueue(BaseModel):
@@ -63,3 +64,9 @@ class ProbesAttack(BaseModel):
     gid: str
     ids: list[str]
     """List of the ids of each probe that will attack"""
+
+
+class AcquireTech(BaseModel):
+    gid: str
+    tech: str
+    """Tech name"""

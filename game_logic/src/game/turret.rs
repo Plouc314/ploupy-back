@@ -1,6 +1,6 @@
 use super::{
     core, Coord, Delayer, FrameContext, GameConfig, Identifiable, Player, Point, ProbeDeathCause,
-    State, StateHandler,
+    State, StateHandler, Techs,
 };
 
 pub enum TurretPolicy {
@@ -16,7 +16,10 @@ pub enum TurretDeathCause {
 
 struct TurretConfig {
     turret_scope: f64,
+    turret_damage: u32,
     turret_maintenance_costs: f64,
+    tech_scope_increase: f64,
+    tech_maintenance_costs_decrease: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -74,7 +77,10 @@ impl Turret {
             id: id,
             config: TurretConfig {
                 turret_scope: config.turret_scope,
+                turret_damage: config.turret_damage,
                 turret_maintenance_costs: config.turret_maintenance_costs,
+                tech_scope_increase: config.tech_turret_scope_increase,
+                tech_maintenance_costs_decrease: config.tech_turret_maintenance_costs_decrease,
             },
             state_handle: StateHandler::new(&id),
             policy: TurretPolicy::Ready,
@@ -100,28 +106,46 @@ impl Turret {
         state
     }
 
+    /// Set the fire delay
+    pub fn set_fire_delay(&mut self, delay: f64) {
+        self.delayer_fire.set_delay(delay);
+    }
+
+    /// Return the turret scope, taking tech into account
+    fn get_scope(&self, player: &Player) -> f64 {
+        if player.has_tech(&Techs::TURRET_SCOPE) {
+            return self.config.turret_scope + self.config.tech_scope_increase;
+        }
+        self.config.turret_scope
+    }
+
     /// Return turret income (costs)
-    pub fn get_income(&self) -> f64 {
+    pub fn get_income(&self, player: &Player) -> f64 {
+        if player.has_tech(&Techs::TURRET_MAINTENANCE_COSTS) {
+            return -self.config.turret_maintenance_costs
+                + self.config.tech_maintenance_costs_decrease;
+        }
         -self.config.turret_maintenance_costs
     }
 
     /// Return if the given pos is in range of the turret
-    fn is_in_range(&self, pos: &Point) -> bool {
+    fn is_in_range(&self, pos: &Point, scope: f64) -> bool {
         let origin = self.pos.as_point();
         let dx = origin.x - pos.x;
         let dy = origin.y - pos.y;
-        dx * dx + dy * dy <= self.config.turret_scope.powi(2)
+        dx * dx + dy * dy <= scope.powi(2)
     }
 
     /// Check for each probe of each opponent
     /// if it is in range, in that case, kill probe (update its state)
     /// and switch to Wait policy
-    fn handle_fire_probe(&mut self, opponents: &mut Vec<&mut Player>) {
+    fn handle_fire_probe(&mut self, player: &Player, opponents: &mut Vec<&mut Player>) {
+        let scope = self.get_scope(player);
         for opp in opponents {
             for probe in opp.iter_mut_probes() {
-                if self.is_in_range(&probe.pos) {
+                if self.is_in_range(&probe.pos, scope) {
                     self.state_handle.get_mut().shot_id = Some(probe.id);
-                    probe.die_inplace(ProbeDeathCause::Shot);
+                    probe.inflict_damage(self.config.turret_damage);
                     self.policy = TurretPolicy::Wait;
                     return;
                 }
@@ -151,7 +175,7 @@ impl Turret {
 
         match self.policy {
             TurretPolicy::Ready => {
-                self.handle_fire_probe(opponents);
+                self.handle_fire_probe(player, opponents);
             }
             TurretPolicy::Wait => {
                 self.wait(ctx);

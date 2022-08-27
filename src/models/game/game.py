@@ -14,6 +14,7 @@ class PlayerState(BaseModel):
     money: int | None = None
     death: str | None = None
     income: int | None = None
+    techs: list[str] = []
     factories: list[entities.FactoryState] = []
     turrets: list[entities.TurretState] = []
     probes: list[entities.ProbeState] = []
@@ -22,6 +23,7 @@ class PlayerState(BaseModel):
 class GameState(BaseModel):
     gid: str
     config: _c.GameConfig | None = None
+    metadata: _c.GameMetadata | None = None
     map: MapState | None = None
     players: list[PlayerState] = []
 

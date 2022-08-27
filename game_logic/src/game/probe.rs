@@ -2,7 +2,7 @@ use super::core::{self, FrameContext};
 use super::core::{Coord, Point};
 use super::player::Player;
 use super::{
-    geometry, Delayer, GameConfig, Identifiable, Map, State, StateHandler, NOT_IDENTIFIABLE,
+    geometry, Delayer, GameConfig, Identifiable, Map, State, StateHandler, Techs, NOT_IDENTIFIABLE,
 };
 
 #[derive(Clone, Debug)]
@@ -22,6 +22,10 @@ pub enum ProbeDeathCause {
 struct ProbeConfig {
     speed: f64,
     claim_delay: f64,
+    claim_intensity: u32,
+    explosion_intensity: u32,
+    tech_explosion_intensity_increase: u32,
+    tech_claim_intensity_increase: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -96,6 +100,7 @@ pub struct Probe {
     state_handle: StateHandler<ProbeState>,
     policy: ProbePolicy,
     pub pos: Point,
+    hp: u32,
     /// store target as Point for optimization
     /// but target is always a coordinate
     target: Point,
@@ -112,16 +117,27 @@ impl Probe {
     /// By default, the target is the same as the position (`pos`)
     /// use, `set_target()` to specify a target, else it will be set
     /// on next frame
-    pub fn new(config: &GameConfig, pos: Point) -> Probe {
+    pub fn new(config: &GameConfig, player: &Player, pos: Point) -> Probe {
         let id = core::generate_unique_id();
+
+        let mut hp = config.probe_hp;
+        if player.has_tech(&Techs::PROBE_HP) {
+            hp += config.tech_probe_hp_increase;
+        }
+
         Probe {
             id: id,
             config: ProbeConfig {
                 speed: config.probe_speed,
                 claim_delay: config.probe_claim_delay,
+                claim_intensity: config.probe_claim_intensity,
+                explosion_intensity: config.probe_explosion_intensity,
+                tech_explosion_intensity_increase: config.tech_probe_explosion_intensity_increase,
+                tech_claim_intensity_increase: config.tech_probe_claim_intensity_increase,
             },
             state_handle: StateHandler::new(&id),
             policy: ProbePolicy::Farm,
+            hp: hp,
             target: pos.clone(),
             pos: pos,
             move_dir: Point::new(0.0, 0.0),
@@ -146,9 +162,15 @@ impl Probe {
         }
     }
 
-    /// Update state with death cause
-    pub fn die_inplace(&mut self, death_cause: ProbeDeathCause) {
-        self.state_handle.get_mut().death = Some(death_cause);
+    /// Inflict damage (reduce probe's hp) \
+    /// In case, the probe has no hp left: update state with death cause
+    pub fn inflict_damage(&mut self, damage: u32) {
+        if damage >= self.hp {
+            self.hp = 0;
+            self.state_handle.get_mut().death = Some(ProbeDeathCause::Shot);
+        } else {
+            self.hp -= damage;
+        }
     }
 
     /// Select a new target and (if found) set the new target
@@ -234,7 +256,7 @@ impl Probe {
 
     /// Claims neighbours tiles twice \
     /// Notify death in probe state
-    pub fn explode(&mut self, player_id: u128, map: &mut Map) {
+    pub fn explode(&mut self, player_id: u128, map: &mut Map, tech_explosion_intensity: bool) {
         self.state_handle.get_mut().death = Some(ProbeDeathCause::Exploded);
         let coords = geometry::square(&self.get_coord(), 1);
         for coord in coords.iter() {
@@ -249,24 +271,31 @@ impl Probe {
                     }
                 }
             };
-            map.claim_tile(player_id, coord);
-            map.claim_tile(player_id, coord);
+            let mut intensity = self.config.explosion_intensity;
+            if tech_explosion_intensity {
+                intensity += self.config.tech_explosion_intensity_increase;
+            }
+            map.claim_tile(player_id, coord, intensity);
         }
     }
 
-    fn attack(&mut self, player_id: u128, ctx: &mut FrameContext) {
+    fn attack(&mut self, player: &Player, ctx: &mut FrameContext) {
         let coord = self.target.as_coord();
         if ctx
             .map
             .get_tile(&coord)
             .unwrap()
-            .is_owned_by_opponent_of(player_id)
+            .is_owned_by_opponent_of(player.id)
         {
-            self.explode(player_id, ctx.map);
+            self.explode(
+                player.id,
+                ctx.map,
+                player.has_tech(&Techs::PROBE_EXPLOSION_INTENSITY),
+            );
         } else {
             self.pos = self.target.clone();
             self.state_handle.get_mut().pos = Some(self.target.clone());
-            self.select_attack_target(player_id, ctx.map);
+            self.select_attack_target(player.id, ctx.map);
         }
     }
 
@@ -275,7 +304,13 @@ impl Probe {
     fn claim(&mut self, player: &Player, ctx: &mut FrameContext) {
         if self.delayer_claim.wait(ctx.dt) {
             self.policy = ProbePolicy::Farm;
-            ctx.map.claim_tile(player.id, &self.get_coord());
+
+            let mut intensity = self.config.claim_intensity;
+            if player.has_tech(&Techs::PROBE_CLAIM_INTENSITY) {
+                intensity += self.config.tech_claim_intensity_increase;
+            }
+
+            ctx.map.claim_tile(player.id, &self.get_coord(), intensity);
             self.select_farm_target(player, ctx.map);
         }
     }
@@ -300,7 +335,7 @@ impl Probe {
             ProbePolicy::Attack => {
                 self.update_pos(ctx);
                 if self.is_target_reached(ctx) {
-                    self.attack(player.id, ctx);
+                    self.attack(player, ctx);
                 }
             }
             ProbePolicy::Claim => {

@@ -5,7 +5,7 @@ use log;
 use super::core::{state_vec_insert, Coord, FrameContext, State};
 use super::player::Player;
 use super::probe::{Probe, ProbeDeathCause, ProbeState};
-use super::{core, geometry, Delayer, GameConfig, Identifiable, StateHandler};
+use super::{core, geometry, Delayer, GameConfig, Identifiable, StateHandler, Techs};
 
 pub enum FactoryPolicy {
     Expand,
@@ -21,8 +21,8 @@ pub enum FactoryDeathCause {
 
 struct FactoryConfig {
     max_probe: u32,
-    build_probe_delay: f64,
     probe_maintenance_costs: f64,
+    tech_max_probe_increase: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -87,8 +87,8 @@ impl Factory {
             id: id,
             config: FactoryConfig {
                 max_probe: config.factory_max_probe,
-                build_probe_delay: config.factory_build_probe_delay,
                 probe_maintenance_costs: config.probe_maintenance_costs,
+                tech_max_probe_increase: config.tech_factory_max_probe_increase,
             },
             state_handle: StateHandler::new(&id),
             policy: FactoryPolicy::Expand,
@@ -124,6 +124,11 @@ impl Factory {
         self.probes.push(probe);
     }
 
+    /// Set the build probe delay
+    pub fn set_build_probe_delay(&mut self, delay: f64) {
+        self.delayer_produce.set_delay(delay);
+    }
+
     /// Return the number of probes currently attached to the factory
     pub fn get_num_probes(&self) -> usize {
         self.probes.len()
@@ -147,6 +152,15 @@ impl Factory {
     /// Return factory income (costs)
     pub fn get_income(&self) -> f64 {
         -(self.probes.len() as f64) * self.config.probe_maintenance_costs
+    }
+
+    /// Return the maximum number of probe the factory can have,
+    /// taking tech into account
+    fn get_max_probe(&self, player: &Player) -> u32 {
+        if player.has_tech(&Techs::FACTORY_MAX_PROBE) {
+            return self.config.max_probe + self.config.tech_max_probe_increase;
+        }
+        self.config.max_probe
     }
 
     /// Factory dies \
@@ -179,7 +193,7 @@ impl Factory {
         }
         let coords = geometry::square(&self.pos, self.expand_step);
         for coord in coords.iter() {
-            ctx.map.claim_tile(player_id, coord);
+            ctx.map.claim_tile(player_id, coord, 2);
         }
     }
 
@@ -189,8 +203,8 @@ impl Factory {
     /// when resolving states (thus there is no guarantee that the probe
     /// will effectively be created) \
     /// Switch to Wait policy when `max_probe` reached
-    fn produce(&mut self, ctx: &mut FrameContext) {
-        if self.probes.len() == self.config.max_probe as usize {
+    fn produce(&mut self, player: &Player, ctx: &mut FrameContext) {
+        if self.probes.len() == self.get_max_probe(player) as usize {
             self.policy = FactoryPolicy::Wait;
             return;
         }
@@ -201,8 +215,8 @@ impl Factory {
     }
 
     /// Switch to Produce policy when having less than `max_probe`
-    fn wait(&mut self, ctx: &mut FrameContext) {
-        if self.probes.len() < self.config.max_probe as usize {
+    fn wait(&mut self, player: &Player, ctx: &mut FrameContext) {
+        if self.probes.len() < self.get_max_probe(player) as usize {
             self.policy = FactoryPolicy::Produce;
         }
     }
@@ -219,10 +233,10 @@ impl Factory {
                 self.expand(player.id, ctx);
             }
             FactoryPolicy::Produce => {
-                self.produce(ctx);
+                self.produce(player, ctx);
             }
             FactoryPolicy::Wait => {
-                self.wait(ctx);
+                self.wait(player, ctx);
             }
         }
 

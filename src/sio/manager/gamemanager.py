@@ -25,6 +25,7 @@ class GameManager(Manager):
             gid=game.gid,
             active=active,
             gmid=game.mode.id,
+            metadata=game.metadata,
             users=[player.user for player in game.players],
         )
 
@@ -68,14 +69,24 @@ class GameManager(Manager):
         return games
 
     def add_game(
-        self, gid: str, game: Game, users: list[_s.User], mode: core.GameMode
+        self,
+        gid: str,
+        game: Game,
+        users: list[_s.User],
+        mode: core.GameMode,
+        metadata: core.GameMetadata,
     ) -> _s.Game:
         """
         Build and add a new sio.Game instance from the given game
         Return the sio.Game
         """
         game_state = _s.Game(
-            gid=gid, mode=mode, game=game, players=users, spectators=[]
+            gid=gid,
+            mode=mode,
+            metadata=metadata,
+            game=game,
+            players=users,
+            spectators=[],
         )
         self._games[gid] = game_state
         return game_state
@@ -121,7 +132,9 @@ class GameManager(Manager):
         user.gids.add(gs.gid)
         sio.enter_room(user.sid, room=gs.gid)
 
-    async def create_game(self, users: list[_s.User], mode: core.GameMode):
+    async def create_game(
+        self, users: list[_s.User], mode: core.GameMode, metadata: core.GameMetadata
+    ):
         """
         Create a new Game instance
         - Make all users enters the game room
@@ -138,9 +151,10 @@ class GameManager(Manager):
             [user.user for user in users],
             job_manager,
             mode.config,
+            metadata,
             lambda r, a: self.end_game(gid, r, a),
         )
-        gs = self.add_game(gid, game, users, mode)
+        gs = self.add_game(gid, game, users, mode, metadata)
 
         # create room
         for user in users:

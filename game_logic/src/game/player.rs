@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use log;
 
 use crate::game::state_vec_insert;
@@ -12,6 +14,94 @@ use super::{
     Point, StateHandler,
 };
 
+/// All player technologies
+#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+pub enum Techs {
+    PROBE_EXPLOSION_INTENSITY,
+    PROBE_CLAIM_INTENSITY,
+    PROBE_HP,
+    FACTORY_BUILD_DELAY,
+    FACTORY_PROBE_PRICE,
+    FACTORY_MAX_PROBE,
+    TURRET_SCOPE,
+    TURRET_FIRE_DELAY,
+    TURRET_MAINTENANCE_COSTS,
+}
+
+impl Techs {
+    /// Create an instance from a string \
+    /// Return an error in case the `string` is invalid
+    pub fn from_string(string: &str) -> Result<Self, String> {
+        match string {
+            "PROBE_EXPLOSION_INTENSITY" => Ok(Techs::PROBE_EXPLOSION_INTENSITY),
+            "PROBE_CLAIM_INTENSITY" => Ok(Techs::PROBE_CLAIM_INTENSITY),
+            "PROBE_HP" => Ok(Techs::PROBE_HP),
+            "FACTORY_BUILD_DELAY" => Ok(Techs::FACTORY_BUILD_DELAY),
+            "FACTORY_PROBE_PRICE" => Ok(Techs::FACTORY_PROBE_PRICE),
+            "FACTORY_MAX_PROBE" => Ok(Techs::FACTORY_MAX_PROBE),
+            "TURRET_SCOPE" => Ok(Techs::TURRET_SCOPE),
+            "TURRET_FIRE_DELAY" => Ok(Techs::TURRET_FIRE_DELAY),
+            "TURRET_MAINTENANCE_COSTS" => Ok(Techs::TURRET_MAINTENANCE_COSTS),
+            _ => Err(format!("Invalid tech name: {}", string)),
+        }
+    }
+
+    /// Return if the `tech` doesn't conflicts with the `techs`
+    pub fn is_tech_acquirable(techs: &HashSet<Self>, tech: &Self) -> bool {
+        match tech {
+            Techs::PROBE_CLAIM_INTENSITY => {
+                !techs.contains(&Techs::PROBE_EXPLOSION_INTENSITY)
+                    && !techs.contains(&Techs::PROBE_HP)
+            }
+            Techs::PROBE_EXPLOSION_INTENSITY => {
+                !techs.contains(&Techs::PROBE_CLAIM_INTENSITY) && !techs.contains(&Techs::PROBE_HP)
+            }
+            Techs::PROBE_HP => {
+                !techs.contains(&Techs::PROBE_CLAIM_INTENSITY)
+                    && !techs.contains(&Techs::PROBE_EXPLOSION_INTENSITY)
+            }
+            Techs::FACTORY_BUILD_DELAY => {
+                !techs.contains(&Techs::FACTORY_MAX_PROBE)
+                    && !techs.contains(&Techs::FACTORY_PROBE_PRICE)
+            }
+            Techs::FACTORY_MAX_PROBE => {
+                !techs.contains(&Techs::FACTORY_BUILD_DELAY)
+                    && !techs.contains(&Techs::FACTORY_PROBE_PRICE)
+            }
+            Techs::FACTORY_PROBE_PRICE => {
+                !techs.contains(&Techs::FACTORY_MAX_PROBE)
+                    && !techs.contains(&Techs::FACTORY_BUILD_DELAY)
+            }
+            Techs::TURRET_FIRE_DELAY => {
+                !techs.contains(&Techs::TURRET_MAINTENANCE_COSTS)
+                    && !techs.contains(&Techs::TURRET_SCOPE)
+            }
+            Techs::TURRET_MAINTENANCE_COSTS => {
+                !techs.contains(&Techs::TURRET_FIRE_DELAY) && !techs.contains(&Techs::TURRET_SCOPE)
+            }
+            Techs::TURRET_SCOPE => {
+                !techs.contains(&Techs::TURRET_MAINTENANCE_COSTS)
+                    && !techs.contains(&Techs::TURRET_FIRE_DELAY)
+            }
+        }
+    }
+
+    /// Return the price of `tech`
+    pub fn get_tech_price(config: &PlayerConfig, tech: &Self) -> f64 {
+        match tech {
+            Techs::PROBE_CLAIM_INTENSITY => config.tech_probe_claim_intensity_price,
+            Techs::PROBE_EXPLOSION_INTENSITY => config.tech_probe_explosion_intensity_price,
+            Techs::PROBE_HP => config.tech_probe_hp_price,
+            Techs::FACTORY_BUILD_DELAY => config.tech_factory_build_delay_price,
+            Techs::FACTORY_MAX_PROBE => config.tech_factory_max_probe_price,
+            Techs::FACTORY_PROBE_PRICE => config.tech_factory_probe_price_price,
+            Techs::TURRET_FIRE_DELAY => config.tech_turret_fire_delay_price,
+            Techs::TURRET_MAINTENANCE_COSTS => config.tech_turret_maintenance_costs_price,
+            Techs::TURRET_SCOPE => config.tech_turret_scope_price,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum PlayerDeathCause {
     Defeated,
@@ -25,6 +115,19 @@ pub struct PlayerConfig {
     factory_price: f64,
     factory_build_probe_delay: f64,
     turret_price: f64,
+    turret_fire_delay: f64,
+    tech_factory_probe_price_decrease: f64,
+    tech_factory_build_delay_decrease: f64,
+    tech_turret_fire_delay_decrease: f64,
+    tech_probe_explosion_intensity_price: f64,
+    tech_probe_claim_intensity_price: f64,
+    tech_probe_hp_price: f64,
+    tech_factory_build_delay_price: f64,
+    tech_factory_probe_price_price: f64,
+    tech_factory_max_probe_price: f64,
+    tech_turret_scope_price: f64,
+    tech_turret_fire_delay_price: f64,
+    tech_turret_maintenance_costs_price: f64,
 }
 
 #[derive(Clone)]
@@ -71,6 +174,7 @@ pub struct PlayerState {
     pub death: Option<PlayerDeathCause>,
     pub money: Option<f64>,
     pub income: Option<f64>,
+    pub techs: Vec<Techs>,
     pub factories: Vec<FactoryState>,
     pub turrets: Vec<TurretState>,
 }
@@ -90,6 +194,7 @@ impl State for PlayerState {
             death: None,
             money: None,
             income: None,
+            techs: Vec::new(),
             factories: Vec::new(),
             turrets: Vec::new(),
         }
@@ -116,6 +221,7 @@ pub struct Player {
     config: PlayerConfig,
     state_handle: StateHandler<PlayerState>,
     stats: PlayerStats,
+    techs: HashSet<Techs>,
     money: f64,
     pub factories: Vec<Factory>,
     pub turrets: Vec<Turret>,
@@ -134,9 +240,23 @@ impl Player {
                 factory_price: config.factory_price,
                 factory_build_probe_delay: config.factory_build_probe_delay,
                 turret_price: config.turret_price,
+                turret_fire_delay: config.turret_fire_delay,
+                tech_factory_probe_price_decrease: config.tech_factory_probe_price_decrease,
+                tech_factory_build_delay_decrease: config.tech_factory_build_delay_decrease,
+                tech_turret_fire_delay_decrease: config.tech_turret_fire_delay_decrease,
+                tech_probe_explosion_intensity_price: config.tech_probe_explosion_intensity_price,
+                tech_probe_claim_intensity_price: config.tech_probe_claim_intensity_price,
+                tech_probe_hp_price: config.tech_probe_hp_price,
+                tech_factory_build_delay_price: config.tech_factory_build_delay_price,
+                tech_factory_probe_price_price: config.tech_factory_probe_price_price,
+                tech_factory_max_probe_price: config.tech_factory_max_probe_price,
+                tech_turret_scope_price: config.tech_turret_scope_price,
+                tech_turret_fire_delay_price: config.tech_turret_fire_delay_price,
+                tech_turret_maintenance_costs_price: config.tech_turret_maintenance_costs_price,
             },
             state_handle: StateHandler::new(&id),
             stats: PlayerStats::new(),
+            techs: HashSet::new(),
             money: config.initial_money,
             factories: Vec::new(),
             turrets: Vec::new(),
@@ -151,9 +271,14 @@ impl Player {
             death: None,
             money: Some(self.money),
             income: Some(0.0),
+            techs: Vec::with_capacity(self.techs.len()),
             factories: Vec::with_capacity(self.factories.len()),
             turrets: Vec::with_capacity(self.turrets.len()),
         };
+        for tech in self.techs.iter() {
+            state.techs.push(tech.clone());
+        }
+
         for factory in self.factories.iter() {
             state.factories.push(factory.get_complete_state());
         }
@@ -188,7 +313,7 @@ impl Player {
     /// Return the new probe state
     fn create_probe(&self, state: &mut ProbeState, ctx: &mut FrameContext) -> Option<Probe> {
         if let Some(pos) = &state.pos {
-            let mut probe = Probe::new(ctx.config, pos.clone());
+            let mut probe = Probe::new(ctx.config, &self, pos.clone());
             // set id
             state.id = probe.id;
             // set target
@@ -217,6 +342,19 @@ impl Player {
             .find_map(|f| f.get_mut_probe_by_id(probe_id))
     }
 
+    /// Return if the player has acquired the `tech`
+    pub fn has_tech(&self, tech: &Techs) -> bool {
+        self.techs.contains(tech)
+    }
+
+    /// Return the probe price, taking tech into account
+    fn get_probe_price(&self) -> f64 {
+        if self.has_tech(&Techs::FACTORY_PROBE_PRICE) {
+            return self.config.probe_price - self.config.tech_factory_probe_price_decrease;
+        }
+        self.config.probe_price
+    }
+
     /// Set a new target for the probe \
     /// Update involved states \
     /// Return if it could be done (if the probe exists)
@@ -236,13 +374,14 @@ impl Player {
     /// Return if it could be done (if the probe exists)
     pub fn explode_probe(&mut self, probe_id: u128, map: &mut Map) -> bool {
         let id = self.id;
+        let is_expl_int = self.techs.contains(&Techs::PROBE_EXPLOSION_INTENSITY);
         let probe = match self.get_mut_probe_by_id(probe_id) {
             Some(probe) => probe,
             None => {
                 return false;
             }
         };
-        probe.explode(id, map);
+        probe.explode(id, map, is_expl_int);
         true
     }
 
@@ -373,13 +512,41 @@ impl Player {
         None
     }
 
+    /// Acquire the given technology \
+    /// Return an error in case this fails
+    pub fn acquire_tech(&mut self, tech: Techs) -> Result<(), String> {
+        if self.techs.contains(&tech) {
+            return Err(String::from("Technology already acquired."));
+        }
+
+        if !Techs::is_tech_acquirable(&self.techs, &tech) {
+            return Err(String::from(
+                "Can't acquire multiple technologies of same category.",
+            ));
+        }
+        let price = Techs::get_tech_price(&self.config, &tech);
+
+        if self.money < price {
+            return Err(format!("Not enough money (<{})", price));
+        }
+
+        self.techs.insert(tech.clone());
+        self.state_handle.get_mut().techs.push(tech);
+
+        self.money -= price;
+        self.state_handle.get_mut().money = Some(self.money);
+
+        Ok(())
+    }
+
     /// Compute the income prediction given the last computed income
     fn get_income_prediction(&self, income: f64) -> f64 {
         let mut prediction = income;
+        let probe_price = self.get_probe_price();
         for factory in self.factories.iter() {
             match factory.get_policy() {
                 FactoryPolicy::Produce => {
-                    prediction -= self.config.probe_price / self.config.factory_build_probe_delay;
+                    prediction -= probe_price / self.config.factory_build_probe_delay;
                 }
                 _ => {}
             }
@@ -401,10 +568,11 @@ impl Player {
             income += factory.get_income();
         }
         for turret in self.turrets.iter() {
-            income += turret.get_income();
+            income += turret.get_income(&self);
         }
 
-        self.money += income;
+        self.money = f64::max(self.money + income, 0.0);
+
         let prediction = self.get_income_prediction(income);
 
         self.state_handle.get_mut().money = Some(self.money);
@@ -430,6 +598,39 @@ impl Player {
         self.stats.clone()
     }
 
+    /// Handle new techs that require one-off actions
+    fn handle_new_techs(&mut self) {
+        let mut is_build_delay = false;
+        let mut is_fire_delay = false;
+        for tech in self.state_handle.get().techs.iter() {
+            match tech {
+                Techs::FACTORY_BUILD_DELAY => {
+                    is_build_delay = true;
+                }
+                Techs::TURRET_FIRE_DELAY => {
+                    is_fire_delay = true;
+                }
+                _ => {}
+            };
+        }
+
+        if is_build_delay {
+            for factory in self.factories.iter_mut() {
+                factory.set_build_probe_delay(
+                    self.config.factory_build_probe_delay
+                        - self.config.tech_factory_build_delay_decrease,
+                );
+            }
+        }
+        if is_fire_delay {
+            for turret in self.turrets.iter_mut() {
+                turret.set_fire_delay(
+                    self.config.turret_fire_delay - self.config.tech_turret_fire_delay_decrease,
+                );
+            }
+        }
+    }
+
     /// Check lose condition \
     /// If reached, kill player, update state
     fn handle_lose_condition(&mut self) {
@@ -447,6 +648,8 @@ impl Player {
     ) -> Option<PlayerState> {
         log::debug!("[Player {:.3}] run...", self.id.to_string());
 
+        let probe_price = self.get_probe_price();
+
         // extract factories for iteration
         let mut factories: Vec<Factory> = self.factories.drain(..).collect();
 
@@ -462,10 +665,10 @@ impl Player {
 
                 // create new probes
                 for probe_state in state.probes.iter_mut() {
-                    if probe_state.just_created() && self.money >= self.config.probe_price {
+                    if probe_state.just_created() && self.money >= probe_price {
                         if let Some(probe) = self.create_probe(probe_state, ctx) {
                             is_money_change = true;
-                            self.money -= self.config.probe_price;
+                            self.money -= probe_price;
                             factory.attach_probe(probe);
                         }
                     }
@@ -514,6 +717,7 @@ impl Player {
         }
 
         self.update_money(ctx);
+        self.handle_new_techs();
         self.handle_lose_condition();
 
         if is_money_change {

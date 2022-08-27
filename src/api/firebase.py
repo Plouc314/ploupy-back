@@ -14,6 +14,7 @@ from src.core import FirebaseException, AuthException
 
 MAX_BOT_PER_USER = 5
 MIN_LEN_USERNAME = 5
+MAX_LEN_USERNAME = 18
 
 
 class Firebase:
@@ -156,6 +157,10 @@ class Firebase:
         # assert min length
         if len(username) < MIN_LEN_USERNAME:
             raise InvalidUsernameException(f"Username {username} is too short.")
+
+        # assert max length
+        if len(username) > MAX_LEN_USERNAME:
+            raise InvalidUsernameException(f"Username {username} is too long.")
 
         # assert username unicity
         existing_user = self.get_user(username=username)

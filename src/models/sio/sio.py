@@ -55,6 +55,7 @@ class Queue(BaseModel):
     active: bool
     users: list[User]
     game_mode: _c.GameMode
+    game_metadata: _c.GameMetadata
 
 
 class QueueState(BaseModel):
@@ -68,6 +69,8 @@ class QueueState(BaseModel):
     """if the queue is still active"""
     gmid: str
     """game mode id"""
+    metadata: _c.GameMetadata
+    """game metadata"""
     users: list[_c.User]
     """List of the users in the queue"""
 
@@ -85,6 +88,10 @@ class Game(BaseModel):
     mode: _c.GameMode
     """
     Game mode of the game
+    """
+    metadata: _c.GameMetadata
+    """
+    Metadata of the game
     """
     players: list[User]
     """
@@ -115,5 +122,7 @@ class GameState(BaseModel):
     """if the game is still active"""
     gmid: str
     """game mode id"""
+    metadata: _c.GameMetadata
+    """metadata of the game"""
     users: list[_c.User]
     """List of the users in the game"""

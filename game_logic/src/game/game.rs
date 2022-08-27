@@ -6,7 +6,7 @@ use super::{
     state_vec_insert,
     turret::TurretDeathCause,
     Coord, FactoryDeathCause, FactoryState, GameConfig, Identifiable, PlayerDeathCause,
-    PlayerStats, ProbeState, State, StateHandler,
+    PlayerStats, ProbeState, State, StateHandler, Techs,
 };
 use std::{cmp, collections::HashMap};
 
@@ -118,7 +118,7 @@ impl Game {
 
         // create initial probes
         for _ in 0..self.config.initial_n_probes {
-            let mut probe = Probe::new(&self.config, pos.as_point());
+            let mut probe = Probe::new(&self.config, &player, pos.as_point());
             if let Some(target) = self.map.get_probe_farm_target(&player, &probe) {
                 probe.set_target_manually(target.as_point());
             }
@@ -381,6 +381,20 @@ impl Game {
         for id in ids {
             player.probe_attack(id, &mut self.map);
         }
+
+        Ok(())
+    }
+
+    pub fn acquire_tech(&mut self, player_id: u128, tech: &str) -> Result<(), String> {
+        let player = match self.players.iter_mut().find(|p| p.id == player_id) {
+            Some(player) => player,
+            None => {
+                return Err(String::from("Invalid player (Are you dead ?)"));
+            }
+        };
+
+        let tech = Techs::from_string(tech)?;
+        player.acquire_tech(tech)?;
 
         Ok(())
     }

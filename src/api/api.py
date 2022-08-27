@@ -1,16 +1,21 @@
 from datetime import datetime, timezone
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from ..core.exceptions import BotCreationException, FirebaseException
+from ..core.exceptions import FirebaseException
 
 from src.models import core as _c, api as _a
-from src.core import AuthException, ALLOWED_ORIGINS
+from src.core import AuthException, ALLOWED_ORIGINS, setup_logger
 
 import src.api.mmrsystem as mmrsystem
 from .firebase import Firebase
 from .statistics import Statistics
+from .decorators import with_logger
 
+setup_logger(logging.INFO)
+
+logger = logging.getLogger("ploupy")
 
 # app
 app = FastAPI()
@@ -33,6 +38,7 @@ def ping():
 
 
 @app.get("/api/user-auth")
+@with_logger
 def user_auth(
     firebase_jwt: str | None = None, bot_jwt: str | None = None
 ) -> _a.responses.UserAuth:
@@ -40,6 +46,7 @@ def user_auth(
     Verify the given id token and if valid,
     return the corresponding uid
     """
+
     if firebase_jwt is not None:
         uid = firebase.auth_firebase_jwt(firebase_jwt)
 
@@ -58,13 +65,13 @@ def user_auth(
 
 
 @app.get("/api/user-data")
+@with_logger
 def user_data(
     uid: str | None = None, username: str | None = None
 ) -> _a.responses.UserData:
     """
     Return the user data corresponding to the given uid
     """
-    print(f"{uid=} {username=}")
 
     user = firebase.get_user(uid=uid, username=username)
     if user is None:
@@ -80,6 +87,7 @@ def user_data(
 
 
 @app.post("/api/create-user")
+@with_logger
 def create_user(data: _a.args.CreateUser) -> _c.Response:
     """
     Create the user if possible and return if it was succesful
@@ -102,6 +110,7 @@ def create_user(data: _a.args.CreateUser) -> _c.Response:
 
 
 @app.post("/api/create-bot")
+@with_logger
 def create_bot(data: _a.args.CreateBot) -> _a.responses.CreateBot:
     """
     Create the bot if possible and return if it was succesful
@@ -119,6 +128,7 @@ def create_bot(data: _a.args.CreateBot) -> _a.responses.CreateBot:
 
 
 @app.post("/api/user-online")
+@with_logger
 def user_online(data: _a.args.UserOnline) -> _c.Response:
     """
     Update the last online datetime of the user.
@@ -134,6 +144,7 @@ def user_online(data: _a.args.UserOnline) -> _c.Response:
 
 
 @app.get("/api/game-mode")
+@with_logger
 def game_mode(id: str | None = None, all: bool | None = None) -> _a.responses.GameMode:
     """
     Return the game mode with the given id or name
@@ -152,6 +163,7 @@ def game_mode(id: str | None = None, all: bool | None = None) -> _a.responses.Ga
 
 
 @app.post("/api/game-results")
+@with_logger
 def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
     """
     Update the stats and mmr of all player in the game
@@ -183,7 +195,7 @@ def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
         # get user mmrs
         ummrs = statistics.get_user_mmrs(uid)
 
-        diff = mmrsystem.get_mmr_diff(mode, i)
+        diff = mmrsystem.get_mmr_diff(mode, i, len(data.ranking))
         ummrs.mmrs[mode.id] += diff
 
         mmrs.append(ummrs.mmrs[mode.id])
@@ -205,6 +217,7 @@ def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
 
 
 @app.get("/api/user-stats")
+@with_logger
 def user_stats(uid: str) -> _a.responses.UserStats:
     """
     Return the user stats

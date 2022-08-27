@@ -22,7 +22,7 @@ class Statistics:
     def _cast_date(self, date: datetime) -> str:
         """
         Cast a datetime instance to db format
-        
+
         With only HH:MM:SS and no timezone information
         (date should still be in utc timezone)
         """
@@ -241,8 +241,11 @@ class Statistics:
 
         Note: return an instance with default values in case `uid` is invalid
         """
+        # NOTE scores removed until new db format for metadata
+
         # initialize position occurences at 0
-        scores = [0 for i in range(gmhist.mode.config.n_player)]
+        # scores = [0 for i in range(gmhist.mode.config.n_player)]
+        scores = []
 
         dates: list[str] = []
         mmr_hist: list[int] = []
@@ -256,7 +259,7 @@ class Statistics:
             date = self._cast_date(gstats.date)
             mmr = gstats.mmr
 
-            scores[score_idx] += 1
+            # scores[score_idx] += 1
             dates.append(date)
             mmr_hist.append(mmr)
 
