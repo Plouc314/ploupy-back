@@ -195,7 +195,7 @@ def game_results(data: _a.args.GameResults) -> _a.responses.GameResults:
         # get user mmrs
         ummrs = statistics.get_user_mmrs(uid)
 
-        diff = mmrsystem.get_mmr_diff(mode, i)
+        diff = mmrsystem.get_mmr_diff(mode, i, len(data.ranking))
         ummrs.mmrs[mode.id] += diff
 
         mmrs.append(ummrs.mmrs[mode.id])

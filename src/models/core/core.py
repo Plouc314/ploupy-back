@@ -56,10 +56,10 @@ class Response(BaseModel):
 class GameConfig(BaseModel):
     """
     Global configuration of the game
+
+    Merge with GameMetadata fields to get rust GameConfig.
     """
 
-    dim: Point
-    n_player: int
     initial_money: int
     initial_n_probes: int
     base_income: float
@@ -69,12 +69,14 @@ class GameConfig(BaseModel):
     factory_build_probe_delay: float
     max_occupation: int
     probe_speed: float
+    probe_hp: int
     probe_price: int
     probe_claim_delay: float
     probe_claim_intensity: int
     probe_explosion_intensity: int
     probe_maintenance_costs: float
     turret_price: int
+    turret_damage: int
     turret_fire_delay: float
     turret_scope: float
     turret_maintenance_costs: float
@@ -84,6 +86,8 @@ class GameConfig(BaseModel):
     tech_probe_explosion_intensity_price: float
     tech_probe_claim_intensity_increase: int
     tech_probe_claim_intensity_price: float
+    tech_probe_hp_increase: int
+    tech_probe_hp_price: float
     tech_factory_build_delay_decrease: float
     tech_factory_build_delay_price: float
     tech_factory_probe_price_decrease: float
@@ -144,6 +148,15 @@ class GameMode(BaseModel):
     id: str
     name: str
     config: GameConfig
+
+
+class GameMetadata(BaseModel):
+    """
+    Metadata related to the game
+    """
+
+    dim: Point
+    n_player: int
 
 
 class DBConfig(BaseModel):

@@ -23,6 +23,7 @@ class PlayerState(BaseModel):
 class GameState(BaseModel):
     gid: str
     config: _c.GameConfig | None = None
+    metadata: _c.GameMetadata | None = None
     map: MapState | None = None
     players: list[PlayerState] = []
 

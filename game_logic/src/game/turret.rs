@@ -16,6 +16,7 @@ pub enum TurretDeathCause {
 
 struct TurretConfig {
     turret_scope: f64,
+    turret_damage: u32,
     turret_maintenance_costs: f64,
     tech_scope_increase: f64,
     tech_maintenance_costs_decrease: f64,
@@ -76,6 +77,7 @@ impl Turret {
             id: id,
             config: TurretConfig {
                 turret_scope: config.turret_scope,
+                turret_damage: config.turret_damage,
                 turret_maintenance_costs: config.turret_maintenance_costs,
                 tech_scope_increase: config.tech_turret_scope_increase,
                 tech_maintenance_costs_decrease: config.tech_turret_maintenance_costs_decrease,
@@ -143,7 +145,7 @@ impl Turret {
             for probe in opp.iter_mut_probes() {
                 if self.is_in_range(&probe.pos, scope) {
                     self.state_handle.get_mut().shot_id = Some(probe.id);
-                    probe.die_inplace(ProbeDeathCause::Shot);
+                    probe.inflict_damage(self.config.turret_damage);
                     self.policy = TurretPolicy::Wait;
                     return;
                 }

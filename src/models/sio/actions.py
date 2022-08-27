@@ -6,6 +6,7 @@ from src.models.core import core
 class CreateQueue(BaseModel):
     gmid: str
     """game mode id"""
+    metadata: core.GameMetadata
 
 
 class JoinQueue(BaseModel):

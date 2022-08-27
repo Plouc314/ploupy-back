@@ -100,6 +100,7 @@ pub struct Probe {
     state_handle: StateHandler<ProbeState>,
     policy: ProbePolicy,
     pub pos: Point,
+    hp: u32,
     /// store target as Point for optimization
     /// but target is always a coordinate
     target: Point,
@@ -116,8 +117,14 @@ impl Probe {
     /// By default, the target is the same as the position (`pos`)
     /// use, `set_target()` to specify a target, else it will be set
     /// on next frame
-    pub fn new(config: &GameConfig, pos: Point) -> Probe {
+    pub fn new(config: &GameConfig, player: &Player, pos: Point) -> Probe {
         let id = core::generate_unique_id();
+
+        let mut hp = config.probe_hp;
+        if player.has_tech(&Techs::PROBE_HP) {
+            hp += config.tech_probe_hp_increase;
+        }
+
         Probe {
             id: id,
             config: ProbeConfig {
@@ -130,6 +137,7 @@ impl Probe {
             },
             state_handle: StateHandler::new(&id),
             policy: ProbePolicy::Farm,
+            hp: hp,
             target: pos.clone(),
             pos: pos,
             move_dir: Point::new(0.0, 0.0),
@@ -154,9 +162,15 @@ impl Probe {
         }
     }
 
-    /// Update state with death cause
-    pub fn die_inplace(&mut self, death_cause: ProbeDeathCause) {
-        self.state_handle.get_mut().death = Some(death_cause);
+    /// Inflict damage (reduce probe's hp) \
+    /// In case, the probe has no hp left: update state with death cause
+    pub fn inflict_damage(&mut self, damage: u32) {
+        if damage >= self.hp {
+            self.hp = 0;
+            self.state_handle.get_mut().death = Some(ProbeDeathCause::Shot);
+        } else {
+            self.hp -= damage;
+        }
     }
 
     /// Select a new target and (if found) set the new target

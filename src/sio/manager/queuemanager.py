@@ -22,6 +22,7 @@ class QueueManager(Manager):
             qid=queue.qid,
             active=queue.active,
             gmid=queue.game_mode.id,
+            metadata=queue.game_metadata,
             users=[user.user for user in queue.users],
         )
 
@@ -40,12 +41,20 @@ class QueueManager(Manager):
         """
         return self._queues.get(qid, None)
 
-    def add_queue(self, game_mode: _c.GameMode) -> _s.Queue:
+    def add_queue(
+        self, game_mode: _c.GameMode, game_metadata: _c.GameMetadata
+    ) -> _s.Queue:
         """
         Build an add a new _s.Queue instance
         """
         qid = uuid.uuid4().hex
-        queue_state = _s.Queue(qid=qid, active=True, users=[], game_mode=game_mode)
+        queue_state = _s.Queue(
+            qid=qid,
+            active=True,
+            users=[],
+            game_mode=game_mode,
+            game_metadata=game_metadata,
+        )
         self._queues[qid] = queue_state
         return queue_state
 
@@ -107,7 +116,7 @@ class QueueManager(Manager):
         # add user
         queue.users.append(user)
 
-        if len(queue.users) < queue.game_mode.config.n_player:
+        if len(queue.users) < queue.game_metadata.n_player:
             await sio.emit("man_queue_state", self.get_response([queue]).json())
             return False
 

@@ -1,4 +1,5 @@
 from functools import partial
+import logging
 import time
 from typing import Callable
 
@@ -6,6 +7,8 @@ import game_logic as gl
 from src.models import core as _c, game as _g
 from src.core import ActionException
 from src.sio import JobManager
+
+logger = logging.getLogger("ploupy")
 
 # setup rust logger
 try:
@@ -21,16 +24,20 @@ class Game:
         users: list[_c.User],
         job_manager: JobManager,
         config: _c.GameConfig,
+        metadata: _c.GameMetadata,
         on_end_game: Callable[[_g.GameResult, bool], None],
     ):
         self.gid = gid
         self.users = users  # game players
         self.job_manager = job_manager
         self.config = config
+        self.metadata = metadata
 
         # map: python id -> rust id
         self._ids_map = {u.uid: abs(hash(u.uid)) for u in users}
-        self._game = gl.Game(list(self._ids_map.values()), config.dict())
+
+        rs_config = config.dict() | metadata.dict()
+        self._game = gl.Game(list(self._ids_map.values()), rs_config)
 
         # if the game is finished
         self._ended = False
@@ -72,7 +79,7 @@ class Game:
             yield _g.GameState(**state)
 
         m = sum(frame_times) / len(frame_times)
-        print(f"Mean frame time: {m*1000:.4f} ms")
+        logger.info(f"Mean frame time: {m*1000:.4f} ms")
 
     def is_player(self, uid: str) -> bool:
         """
@@ -90,6 +97,9 @@ class Game:
                 return u
 
     def _cast_rs_model(self, raw: dict):
+        """
+        Cast rust game state to python game state
+        """
         raw["gid"] = self.gid
 
         for ps in raw["players"]:
@@ -259,4 +269,4 @@ class Game:
         state = self._game.get_state()
         self._cast_rs_model(state)
 
-        return _g.GameState(config=self.config, **state)
+        return _g.GameState(config=self.config, metadata=self.metadata, **state)

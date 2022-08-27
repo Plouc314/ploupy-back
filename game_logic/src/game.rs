@@ -52,6 +52,9 @@ pub struct GameConfig {
     /// speed of the probe in coordinate/sec
     pub probe_speed: f64,
 
+    // probe hitpoints
+    pub probe_hp: u32,
+
     /// intensity of claiming when farming
     pub probe_claim_intensity: u32,
 
@@ -70,6 +73,9 @@ pub struct GameConfig {
 
     /// amount to pay to build a new turret
     pub turret_price: f64,
+
+    /// amount of damage inflicted to probe's hp
+    pub turret_damage: u32,
 
     /// delay to wait for the turret between two fires (sec)
     pub turret_fire_delay: f64,
@@ -99,6 +105,12 @@ pub struct GameConfig {
 
     /// price of probe claim intensity tech
     pub tech_probe_claim_intensity_price: f64,
+
+    /// how much the probe hp are increased (turret fire)
+    pub tech_probe_hp_increase: u32,
+
+    /// price of probe hp tech
+    pub tech_probe_hp_price: f64,
 
     /// how much the build probe delay is decreased
     pub tech_factory_build_delay_decrease: f64,

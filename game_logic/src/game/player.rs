@@ -19,6 +19,7 @@ use super::{
 pub enum Techs {
     PROBE_EXPLOSION_INTENSITY,
     PROBE_CLAIM_INTENSITY,
+    PROBE_HP,
     FACTORY_BUILD_DELAY,
     FACTORY_PROBE_PRICE,
     FACTORY_MAX_PROBE,
@@ -34,6 +35,7 @@ impl Techs {
         match string {
             "PROBE_EXPLOSION_INTENSITY" => Ok(Techs::PROBE_EXPLOSION_INTENSITY),
             "PROBE_CLAIM_INTENSITY" => Ok(Techs::PROBE_CLAIM_INTENSITY),
+            "PROBE_HP" => Ok(Techs::PROBE_HP),
             "FACTORY_BUILD_DELAY" => Ok(Techs::FACTORY_BUILD_DELAY),
             "FACTORY_PROBE_PRICE" => Ok(Techs::FACTORY_PROBE_PRICE),
             "FACTORY_MAX_PROBE" => Ok(Techs::FACTORY_MAX_PROBE),
@@ -47,8 +49,17 @@ impl Techs {
     /// Return if the `tech` doesn't conflicts with the `techs`
     pub fn is_tech_acquirable(techs: &HashSet<Self>, tech: &Self) -> bool {
         match tech {
-            Techs::PROBE_CLAIM_INTENSITY => !techs.contains(&Techs::PROBE_EXPLOSION_INTENSITY),
-            Techs::PROBE_EXPLOSION_INTENSITY => !techs.contains(&Techs::PROBE_CLAIM_INTENSITY),
+            Techs::PROBE_CLAIM_INTENSITY => {
+                !techs.contains(&Techs::PROBE_EXPLOSION_INTENSITY)
+                    && !techs.contains(&Techs::PROBE_HP)
+            }
+            Techs::PROBE_EXPLOSION_INTENSITY => {
+                !techs.contains(&Techs::PROBE_CLAIM_INTENSITY) && !techs.contains(&Techs::PROBE_HP)
+            }
+            Techs::PROBE_HP => {
+                !techs.contains(&Techs::PROBE_CLAIM_INTENSITY)
+                    && !techs.contains(&Techs::PROBE_EXPLOSION_INTENSITY)
+            }
             Techs::FACTORY_BUILD_DELAY => {
                 !techs.contains(&Techs::FACTORY_MAX_PROBE)
                     && !techs.contains(&Techs::FACTORY_PROBE_PRICE)
@@ -80,6 +91,7 @@ impl Techs {
         match tech {
             Techs::PROBE_CLAIM_INTENSITY => config.tech_probe_claim_intensity_price,
             Techs::PROBE_EXPLOSION_INTENSITY => config.tech_probe_explosion_intensity_price,
+            Techs::PROBE_HP => config.tech_probe_hp_price,
             Techs::FACTORY_BUILD_DELAY => config.tech_factory_build_delay_price,
             Techs::FACTORY_MAX_PROBE => config.tech_factory_max_probe_price,
             Techs::FACTORY_PROBE_PRICE => config.tech_factory_probe_price_price,
@@ -109,6 +121,7 @@ pub struct PlayerConfig {
     tech_turret_fire_delay_decrease: f64,
     tech_probe_explosion_intensity_price: f64,
     tech_probe_claim_intensity_price: f64,
+    tech_probe_hp_price: f64,
     tech_factory_build_delay_price: f64,
     tech_factory_probe_price_price: f64,
     tech_factory_max_probe_price: f64,
@@ -233,6 +246,7 @@ impl Player {
                 tech_turret_fire_delay_decrease: config.tech_turret_fire_delay_decrease,
                 tech_probe_explosion_intensity_price: config.tech_probe_explosion_intensity_price,
                 tech_probe_claim_intensity_price: config.tech_probe_claim_intensity_price,
+                tech_probe_hp_price: config.tech_probe_hp_price,
                 tech_factory_build_delay_price: config.tech_factory_build_delay_price,
                 tech_factory_probe_price_price: config.tech_factory_probe_price_price,
                 tech_factory_max_probe_price: config.tech_factory_max_probe_price,
@@ -299,7 +313,7 @@ impl Player {
     /// Return the new probe state
     fn create_probe(&self, state: &mut ProbeState, ctx: &mut FrameContext) -> Option<Probe> {
         if let Some(pos) = &state.pos {
-            let mut probe = Probe::new(ctx.config, pos.clone());
+            let mut probe = Probe::new(ctx.config, &self, pos.clone());
             // set id
             state.id = probe.id;
             // set target

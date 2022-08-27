@@ -118,7 +118,7 @@ impl Game {
 
         // create initial probes
         for _ in 0..self.config.initial_n_probes {
-            let mut probe = Probe::new(&self.config, pos.as_point());
+            let mut probe = Probe::new(&self.config, &player, pos.as_point());
             if let Some(target) = self.map.get_probe_farm_target(&player, &probe) {
                 probe.set_target_manually(target.as_point());
             }

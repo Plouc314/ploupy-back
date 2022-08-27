@@ -1,6 +1,7 @@
+import logging
 import socketio
 
-from src.core import ActionException
+from src.core import ActionException, setup_logger
 
 from src.models import core as _c, sio as _s
 from src.models.sio import actions, responses
@@ -11,6 +12,10 @@ from .manager.gamemanager import GameManager
 from .manager.queuemanager import QueueManager
 from .manager.usermanager import UserManager
 import src.sio.decorators as deco
+
+setup_logger(logging.INFO)
+
+logger = logging.getLogger("ploupy")
 
 app = socketio.ASGIApp(sio)
 
@@ -35,9 +40,9 @@ async def connect(sid: str, environ: dict):
     pers = await uman.connect(sid, firebase_jwt=firebase_jwt, bot_jwt=bot_jwt)
 
     if isinstance(pers, _s.User):
-        print(pers.user.username, "connected")
+        logger.info(f"[{pers.sid[:3]}] {pers.user.username} connected")
     else:
-        print(f"visitor {pers.sid[:3]} connected")
+        logger.info(f"[{pers.sid[:3]}] visitor connected")
 
     await qman.connect()
     await gman.connect()
@@ -50,12 +55,12 @@ async def disconnect(sid: str):
     vis = uman.get_visitor(sid)
 
     if us is not None:
-        print(us.user.username, "disconnected")
+        logger.info(f"[{us.sid[:3]}] {us.user.username} disconnected")
 
         # update last online time
         await client.post_user_online(us)
     else:
-        print(f"visitor {vis.sid[:3]} disconnected")
+        logger.info(f"[{vis.sid[:3]}] visitor disconnected")
 
     pers = us if vis is None else vis
 
@@ -110,7 +115,10 @@ async def create_queue(us: _s.User, model: actions.CreateQueue) -> _c.Response:
         ).json()
 
     # create queue
-    qs = qman.add_queue(game_mode)
+    qs = qman.add_queue(
+        game_mode=game_mode,
+        game_metadata=model.metadata,
+    )
 
     # add creator user
     qs.users.append(us)
@@ -145,7 +153,7 @@ async def join_queue(us: _s.User, model: actions.JoinQueue) -> _c.Response:
     if not is_full:
         return _c.Response().json()
 
-    await gman.create_game(queue.users, queue.game_mode)
+    await gman.create_game(queue.users, queue.game_mode, queue.game_metadata)
 
     return _c.Response().json()
 
