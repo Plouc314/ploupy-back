@@ -42,6 +42,10 @@ async def connect(sid: str, environ: dict):
     if isinstance(pers, _s.User):
         logger.info(f"[{pers.sid[:3]}] {pers.user.username} connected")
     else:
+        if bot_jwt is not None:
+            logger.info(f"[{pers.sid[:3]}] Bot connection rejected.")
+            return False
+
         logger.info(f"[{pers.sid[:3]}] visitor connected")
 
     await qman.connect()

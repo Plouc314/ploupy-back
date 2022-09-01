@@ -16,8 +16,6 @@ services:
       context: .
       dockerfile: docker/sio/Dockerfile
     network_mode: "host"
-    ports:
-      - "8000:8000"
     environment:
       - PORT=8000
     env_file:

@@ -213,6 +213,9 @@ impl State for PlayerState {
         for factory in state.factories {
             state_vec_insert(&mut self.factories, factory);
         }
+        for turret in state.turrets {
+            state_vec_insert(&mut self.turrets, turret);
+        }
     }
 }
 

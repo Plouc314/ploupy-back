@@ -171,7 +171,8 @@ impl Game {
                         state.factories.push(factory_state);
                     }
                     // try kill turret
-                    if let Some(turret_state) = player.kill_turret(*id, TurretDeathCause::Conquered)
+                    else if let Some(turret_state) =
+                        player.kill_turret(*id, TurretDeathCause::Conquered)
                     {
                         // if it could be killed then it was a turret
                         state.turrets.push(turret_state);

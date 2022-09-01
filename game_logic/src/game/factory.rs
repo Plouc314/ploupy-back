@@ -21,6 +21,8 @@ pub enum FactoryDeathCause {
 
 struct FactoryConfig {
     max_probe: u32,
+    expansion_size: u32,
+    maintenance_costs: f64,
     probe_maintenance_costs: f64,
     tech_max_probe_increase: u32,
 }
@@ -87,6 +89,8 @@ impl Factory {
             id: id,
             config: FactoryConfig {
                 max_probe: config.factory_max_probe,
+                expansion_size: config.factory_expansion_size,
+                maintenance_costs: config.factory_maintenance_costs,
                 probe_maintenance_costs: config.probe_maintenance_costs,
                 tech_max_probe_increase: config.tech_factory_max_probe_increase,
             },
@@ -152,6 +156,7 @@ impl Factory {
     /// Return factory income (costs)
     pub fn get_income(&self) -> f64 {
         -(self.probes.len() as f64) * self.config.probe_maintenance_costs
+            - self.config.maintenance_costs
     }
 
     /// Return the maximum number of probe the factory can have,
@@ -186,7 +191,7 @@ impl Factory {
             return;
         }
         self.expand_step += 1;
-        if self.expand_step == 4 {
+        if self.expand_step == self.config.expansion_size + 1 {
             self.expand_step = 0;
             self.policy = FactoryPolicy::Produce;
             return;
