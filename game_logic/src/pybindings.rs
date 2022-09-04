@@ -278,6 +278,8 @@ impl FromDict for GameConfig {
             base_income: get_item(dict, "base_income")?,
             building_occupation_min: get_item(dict, "building_occupation_min")?,
             factory_price: get_item(dict, "factory_price")?,
+            factory_expansion_size: get_item(dict, "factory_expansion_size")?,
+            factory_maintenance_costs: get_item(dict, "factory_maintenance_costs")?,
             factory_max_probe: get_item(dict, "factory_max_probe")?,
             factory_build_probe_delay: get_item(dict, "factory_build_probe_delay")?,
             max_occupation: get_item(dict, "max_occupation")?,

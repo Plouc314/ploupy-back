@@ -1,5 +1,6 @@
 use super::{
     core::FrameContext,
+    geometry,
     map::{Map, MapState},
     player::{Player, PlayerState},
     probe::Probe,
@@ -116,6 +117,12 @@ impl Game {
         // create initial factory
         player.create_factory(pos.clone(), &mut self.map, &self.config);
 
+        // create initial territory
+        let coords = geometry::square(&pos, self.config.factory_expansion_size + 1);
+        for coord in coords {
+            self.map.claim_tile(id, &coord, 2);
+        }
+
         // create initial probes
         for _ in 0..self.config.initial_n_probes {
             let mut probe = Probe::new(&self.config, &player, pos.as_point());
@@ -171,7 +178,8 @@ impl Game {
                         state.factories.push(factory_state);
                     }
                     // try kill turret
-                    if let Some(turret_state) = player.kill_turret(*id, TurretDeathCause::Conquered)
+                    else if let Some(turret_state) =
+                        player.kill_turret(*id, TurretDeathCause::Conquered)
                     {
                         // if it could be killed then it was a turret
                         state.turrets.push(turret_state);
