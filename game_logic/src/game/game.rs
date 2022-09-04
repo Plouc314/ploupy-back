@@ -1,5 +1,6 @@
 use super::{
     core::FrameContext,
+    geometry,
     map::{Map, MapState},
     player::{Player, PlayerState},
     probe::Probe,
@@ -115,6 +116,12 @@ impl Game {
         let mut player = Player::new(id, &self.config);
         // create initial factory
         player.create_factory(pos.clone(), &mut self.map, &self.config);
+
+        // create initial territory
+        let coords = geometry::square(&pos, self.config.factory_expansion_size + 1);
+        for coord in coords {
+            self.map.claim_tile(id, &coord, 2);
+        }
 
         // create initial probes
         for _ in 0..self.config.initial_n_probes {
