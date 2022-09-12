@@ -26,3 +26,9 @@ class AuthException(Exception):
     """
     Exception raised when custom authentification fails
     """
+
+
+class UserManagerException(Exception):
+    """
+    Exception raised when something goes wrong with the user manager
+    """

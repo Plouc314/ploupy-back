@@ -1,4 +1,5 @@
 from src.models import core as _c, sio as _s
+from src.core import UserManagerException
 
 from .manager import Manager
 from ..sio import sio
@@ -16,29 +17,31 @@ class UserManager(Manager):
 
     async def connect(
         self, sid: str, firebase_jwt: str | None = None, bot_jwt: str | None = None
-    ) -> _s.User | _s.Visitor:
+    ) -> _s.User:
         """
         - Verify jwt auth
         - If auth successful get user data
-        - Build and add a new sio.User/sio.Visitor instance
+        - Build and add a new sio.User instance
         - If user, broadcast user connection
 
-        Return the sio.User / sio.Visitor
+        Raises:
+            UserManagerException: When something goes wrong
+
+        Return the sio.User
         """
         response = await client.get_user_auth(
             firebase_jwt=firebase_jwt,
             bot_jwt=bot_jwt,
         )
         if response is None:
-            visitor = _s.Visitor(sid=sid)
-            self._visitors[sid] = visitor
-            return visitor
+            raise UserManagerException("Authentification failed.")
 
         response = await client.get_user_data(response.uid)
         if response is None:
-            visitor = _s.Visitor(sid=sid)
-            self._visitors[sid] = visitor
-            return visitor
+            raise UserManagerException("Couldn't get user data.")
+
+        if self.get_user(uid=response.user.uid) is not None:
+            raise UserManagerException("User is already connected.")
 
         user_sio = _s.User(sid=sid, user=response.user)
         self._users[sid] = user_sio
@@ -59,6 +62,21 @@ class UserManager(Manager):
             self._users.pop(pers.sid, None)
 
             await sio.emit("man_user_state", self.get_user_response(pers, False).json())
+
+    def add_visitor(self, sid: str) -> _s.Visitor:
+        """
+        Add a visitor to the user manager
+        """
+        visitor = _s.Visitor(sid=sid)
+        self._visitors[sid] = visitor
+        return visitor
+
+    def remove_visitor(self, sid: str) -> _s.Visitor:
+        """
+        Remove a visitor from the user manager
+        """
+        if sid in self._visitors.keys():
+            return self._visitors.pop(sid)
 
     def get_user(
         self, sid: str | None = None, uid: str | None = None

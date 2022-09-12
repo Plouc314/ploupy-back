@@ -1,7 +1,8 @@
 import logging
 import socketio
+from socketio.exceptions import ConnectionRefusedError
 
-from src.core import ActionException, setup_logger
+from src.core import ActionException, UserManagerException, setup_logger
 
 from src.models import core as _c, sio as _s
 from src.models.sio import actions, responses
@@ -37,16 +38,17 @@ async def connect(sid: str, environ: dict):
     firebase_jwt = environ.get("HTTP_FIREBASE_JWT", None)
     bot_jwt = environ.get("HTTP_BOT_JWT", None)
 
-    pers = await uman.connect(sid, firebase_jwt=firebase_jwt, bot_jwt=bot_jwt)
-
-    if isinstance(pers, _s.User):
-        logger.info(f"[{pers.sid[:3]}] {pers.user.username} connected")
+    if firebase_jwt is None and bot_jwt is None:
+        visitor = uman.add_visitor(sid)
+        logger.info(f"[{visitor.sid[:3]}] visitor connected")
     else:
-        if bot_jwt is not None:
-            logger.info(f"[{pers.sid[:3]}] Bot connection rejected.")
-            return False
+        try:
+            user = await uman.connect(sid, firebase_jwt=firebase_jwt, bot_jwt=bot_jwt)
+        except UserManagerException as e:
+            logger.info(f"[{sid[:3]}] Connection rejected: {e}")
+            raise ConnectionRefusedError(e)
 
-        logger.info(f"[{pers.sid[:3]}] visitor connected")
+        logger.info(f"[{user.sid[:3]}] {user.user.username} connected")
 
     await qman.connect()
     await gman.connect()
@@ -73,7 +75,58 @@ async def disconnect(sid: str):
     await uman.disconnect(pers)
 
 
-@sio.event
+@sio.on("upgrade_auth")
+@deco.with_model(actions.UpgradeAuth)
+async def upgrade_auth(sid: str, data: actions.UpgradeAuth) -> _c.Response:
+    """
+    Upgrade the auth state of a client.
+
+    if client is a visitor, tries to authentificate to user.
+    """
+    pers = uman.get_person(sid)
+
+    if isinstance(pers, _s.User):
+        # if the client is already a user -> nothing to do
+        logger.info(f"[upgrade_auth] [{sid[:3]}] No effect.")
+        return _c.Response().json()
+    elif isinstance(pers, _s.Visitor):
+        try:
+            user = await uman.connect(sid, firebase_jwt=data.firebase_jwt)
+        except UserManagerException as e:
+            logger.info(f"[upgrade_auth] [{sid[:3]}] Auth failed.")
+            return _c.Response(success=False, msg=str(e)).json()
+
+        # remove previously connected visitor as client is now a user
+        uman.remove_visitor(sid)
+
+        logger.info(f"[upgrade_auth] [{sid[:3]}] {user.user.username} connected.")
+    else:
+        logger.info(f"[upgrade_auth] [{sid[:3]}] Unknown sid.")
+        return _c.Response(success=False, msg="Unknown session id.")
+    return _c.Response().json()
+
+
+@sio.on("downgrade_auth")
+async def downgrade_auth(sid: str, data: dict) -> _c.Response:
+    """
+    Downgrade the auth state of a client.
+
+    if client is a user, fall back to visitor.
+    """
+    logger.info(f"[downgrade_auth] [{sid[:3]}]")
+    user = uman.get_user(sid=sid)
+
+    if user is not None:
+        # properly disconnect -> broadcast disconnection
+        await uman.disconnect(user)
+
+        # create new visitor
+        uman.add_visitor(sid)
+
+    return _c.Response().json()
+
+
+@sio.on("man_user_state")
 async def man_user_state(sid: str, data: dict) -> _c.Response:
     """
     Broadcast the current user manager state to requesting user
@@ -83,7 +136,7 @@ async def man_user_state(sid: str, data: dict) -> _c.Response:
     return _c.Response().json()
 
 
-@sio.event
+@sio.on("man_queue_state")
 async def man_queue_state(sid: str, data: dict) -> _c.Response:
     """
     Broadcast the current manager queue state to requesting user
@@ -93,7 +146,7 @@ async def man_queue_state(sid: str, data: dict) -> _c.Response:
     return _c.Response().json()
 
 
-@sio.event
+@sio.on("man_game_state")
 async def man_game_state(sid: str, data: dict) -> _c.Response:
     """
     Broadcast the current game manager state to requesting game

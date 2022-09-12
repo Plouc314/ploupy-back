@@ -418,9 +418,7 @@ impl Player {
     ) -> FactoryState {
         let factory = Factory::new(config, pos.clone());
 
-        if let Some(tile) = map.get_mut_tile(&pos) {
-            tile.building_id = Some(factory.id);
-        }
+        map.set_new_building(&pos, factory.id).unwrap();
 
         let mut state = FactoryState::new(&factory.id);
         state.coord = Some(pos);
@@ -472,9 +470,7 @@ impl Player {
     pub fn create_turret(&mut self, pos: Coord, map: &mut Map, config: &GameConfig) -> TurretState {
         let turret = Turret::new(config, pos.clone());
 
-        if let Some(tile) = map.get_mut_tile(&pos) {
-            tile.building_id = Some(turret.id);
-        }
+        map.set_new_building(&pos, turret.id).unwrap();
 
         let mut state = TurretState::new(&turret.id);
         state.coord = Some(pos);
