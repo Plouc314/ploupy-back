@@ -57,6 +57,10 @@ pub struct Map {
     config: MapConfig,
     pub state_handle: StateHandler<MapState>,
     tiles: Vec<Vec<Tile>>,
+    /// Store coordinates of all buildings
+    /// -> fast iteration trough map buidings \
+    /// `{player id: {building_id: building_coord}}`
+    buildings: HashMap<u128, HashMap<u128, Coord>>,
     delayer_deprecate: Delayer,
 }
 
@@ -80,6 +84,7 @@ impl Map {
             },
             state_handle: StateHandler::new(&()),
             tiles: tiles,
+            buildings: HashMap::new(),
             delayer_deprecate: Delayer::new(1.0),
         };
     }
@@ -201,11 +206,16 @@ impl Map {
         };
 
         // then look next to the factories
-        for factory in player.factories.iter() {
-            if let Some(target) = self.get_close_probe_farm_target(player, &factory.pos) {
-                return Some(target);
+        // NOTE: do not use player.factories as it is empty
+        // see factories.drain in Player.run
+        if let Some(buildings) = self.buildings.get(&player.id) {
+            for coord in buildings.values() {
+                if let Some(target) = self.get_close_probe_farm_target(player, &coord) {
+                    return Some(target);
+                }
             }
         }
+
         None
     }
 
@@ -263,6 +273,27 @@ impl Map {
         }
     }
 
+    /// Set a building id, this method
+    /// should be called each time a new building is created
+    pub fn set_new_building(&mut self, coord: &Coord, id: u128) -> Result<(), ()> {
+        if let Some(tile) = self.get_mut_tile(&coord) {
+            tile.building_id = Some(id);
+
+            // add building id as attribute
+            let owner_id = tile.owner_id.unwrap();
+            if !self.buildings.contains_key(&owner_id) {
+                self.buildings.insert(owner_id, HashMap::new());
+            }
+            self.buildings
+                .get_mut(&owner_id)
+                .unwrap()
+                .insert(id, coord.clone());
+
+            return Ok(());
+        }
+        Err(())
+    }
+
     /// Claim the tile at the coordinate of the probe
     /// with the given intensity \
     /// Store the tile state, potential building death in current state \
@@ -303,6 +334,11 @@ impl Map {
 
         // add building death to current state
         if let Some((owner, building)) = deaths {
+            // remove building id from instance attribute
+            if let Some(buildings) = self.buildings.get_mut(&owner) {
+                buildings.remove(&building);
+            }
+
             if let Some(ids) = self.state_handle.get_mut().dead_building.get_mut(&owner) {
                 ids.push(building);
             } else {

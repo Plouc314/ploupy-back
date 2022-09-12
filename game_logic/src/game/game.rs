@@ -114,14 +114,16 @@ impl Game {
     fn create_player(&mut self, id: u128, pos: Coord) -> Player {
         // create player
         let mut player = Player::new(id, &self.config);
-        // create initial factory
-        player.create_factory(pos.clone(), &mut self.map, &self.config);
 
         // create initial territory
         let coords = geometry::square(&pos, self.config.factory_expansion_size + 1);
         for coord in coords {
             self.map.claim_tile(id, &coord, 2);
         }
+
+        // create initial factory
+        // NOTE: must do it after created initial territory
+        player.create_factory(pos.clone(), &mut self.map, &self.config);
 
         // create initial probes
         for _ in 0..self.config.initial_n_probes {

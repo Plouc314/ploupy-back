@@ -3,6 +3,10 @@ from pydantic import BaseModel
 from src.models.core import core
 
 
+class UpgradeAuth(BaseModel):
+    firebase_jwt: str
+
+
 class CreateQueue(BaseModel):
     gmid: str
     """game mode id"""
