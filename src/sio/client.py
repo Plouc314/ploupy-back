@@ -18,7 +18,7 @@ class Client:
     """Client to the main api"""
 
     URL_DEV = "http://127.0.0.1:5000/api/"
-    URL_DEPLOY = "https://ploupy.herokuapp.com/api/"
+    URL_DEPLOY = "https://ploupy-api-production.up.railway.app/api/"
     URL = URL_DEPLOY if FLAG_DEPLOY else URL_DEV
 
     SIO_TOKEN = os.environ["SIO_TOKEN"]

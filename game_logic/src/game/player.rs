@@ -541,15 +541,16 @@ impl Player {
     /// Compute the income prediction given the last computed income
     fn get_income_prediction(&self, income: f64) -> f64 {
         let mut prediction = income;
-        let probe_price = self.get_probe_price();
-        for factory in self.factories.iter() {
-            match factory.get_policy() {
-                FactoryPolicy::Produce => {
-                    prediction -= probe_price / self.config.factory_build_probe_delay;
-                }
-                _ => {}
-            }
-        }
+        // NOTE: do not take into account factory production costs for now
+        // let probe_price = self.get_probe_price();
+        // for factory in self.factories.iter() {
+        //     match factory.get_policy() {
+        //         FactoryPolicy::Produce => {
+        //             prediction -= probe_price / self.config.factory_build_probe_delay;
+        //         }
+        //         _ => {}
+        //     }
+        // }
         prediction
     }
 

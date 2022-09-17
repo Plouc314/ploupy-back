@@ -201,6 +201,12 @@ impl Probe {
                     player_id.to_string(),
                     self.id.to_string(),
                 );
+                self.policy = ProbePolicy::Farm;
+                // set target as coord -> have round numbers
+                let target = self.pos.as_coord();
+                self.target = target.as_point();
+                self.state_handle.get_mut().policy = Some(ProbePolicy::Farm);
+                self.state_handle.get_mut().target = Some(target);
                 return;
             }
         };

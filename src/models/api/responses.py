@@ -15,6 +15,10 @@ class UserData(_c.Response):
     mmrs: _c.UserMMRs
 
 
+class BotToken(_c.Response):
+    bot_jwt: str
+
+
 class CreateBot(_c.Response):
     bot: _c.User
     bot_jwt: str

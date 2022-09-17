@@ -225,6 +225,8 @@ impl Map {
 
         let mut idx = 0;
 
+        let max_idx = i32::max(1000, 4 * self.config.dim.x * self.config.dim.y);
+
         for coord in geometry::iter_vortex(&probe.get_coord()) {
             if let Some(tile) = self.get_tile(&coord) {
                 if tile.is_owned_by_opponent_of(player_id) {
@@ -233,7 +235,7 @@ impl Map {
                 }
             }
             idx += 1;
-            if idx == 1000 {
+            if idx == max_idx {
                 log::warn!("Didn't found attack target");
                 return None;
             }
