@@ -86,6 +86,34 @@ def user_data(
     )
 
 
+@app.get("/api/bot-token")
+@with_logger
+def bot_token(bot_uid: str, firebase_jwt: str) -> _a.responses.BotToken:
+    """
+    Return the bot token of the bot with the given bot uid.
+    """
+    uid = firebase.auth_firebase_jwt(firebase_jwt)
+    if uid is None:
+        return _c.Response(success=False, msg="Invalid web client id token.")
+
+    user = firebase.get_user(uid=uid)
+    if user is None:
+        return _c.Response(success=False, msg="Invalid web client id token (uid).")
+
+    if not bot_uid in user.bots:
+        return _c.Response(success=False, msg="Invalid bot uid (ownership).")
+
+    bot = firebase.get_user(uid=bot_uid)
+    if bot is None:
+        return _c.Response(success=False, msg="Invalid bot uid.")
+
+    keys = firebase.get_user_key(bot_uid)
+
+    jwt = firebase.create_bot_jwt(bot, keys)
+
+    return _a.responses.BotToken(bot_jwt=jwt)
+
+
 @app.post("/api/create-user")
 @with_logger
 def create_user(data: _a.args.CreateUser) -> _c.Response:

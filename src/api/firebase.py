@@ -251,6 +251,18 @@ class Firebase:
 
         return None
 
+    def get_user_key(self, uid: str) -> _c.UserKeys | None:
+        """
+        Return the keys of the user with the given uid,
+        or None if the uid is invalid.
+        """
+        data = db.reference(f"/keys/{uid}").get()
+
+        if data is None:
+            return None
+
+        return _c.UserKeys(**data)
+
     def create_bot(self, user: _c.User, username: str) -> tuple[_c.User, str]:
         """
         Create a bot in the db if possible
